@@ -507,6 +507,8 @@ class TestDecorators(unittest.TestCase):
 
         @emit_before(include_kwargs=["foo"])
         def test_function(self, foo, bar):
+            foo = foo
+            bar = bar
             return "function_result"
 
         wrapped_function = test_function(self.emitter, foo="foo_value", bar="bar_value")

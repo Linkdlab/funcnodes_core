@@ -9,7 +9,7 @@ if not os.path.exists(LOGGINGDIR):
 
 FUNCNODES_LOGGER = logging.getLogger("funcnodes")
 
-FUNCNODES_LOGGER.setLevel(logging.DEBUG)
+FUNCNODES_LOGGER.setLevel(logging.INFO)
 
 
 ch = logging.StreamHandler()

@@ -1,3 +1,6 @@
+__version__ = "0.1.1"
+
+
 from .io import (
     NodeInput,
     NodeOutput,
@@ -62,7 +65,3 @@ __all__ = [
     "types",
     "NodeIOSerialization",
 ]
-
-__version__ = "0.1.0"
-
-DEBUG = True
