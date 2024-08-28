@@ -7,7 +7,7 @@ from .._logging import FUNCNODES_LOGGER
 
 try:
     from funcnodes_react_flow import add_react_plugin
-except ModuleNotFoundError:
+except (ModuleNotFoundError, ImportError):
 
     def add_react_plugin(*args, **kwargs):
         pass
