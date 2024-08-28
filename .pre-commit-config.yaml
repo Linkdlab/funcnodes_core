@@ -6,7 +6,17 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
       - id: no-commit-to-branch
-        args: ["--branch", "master"]
+        args: ["--branch", "main", "--branch", "master", "--branch", "test"]
+
+  - repo: https://github.com/python-poetry/poetry
+    rev: "1.8.0" # add version here
+    hooks:
+      - id: poetry-check
+        verbose: true
+      - id: poetry-lock
+        verbose: true
+      - id: poetry-install
+        verbose: true
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
