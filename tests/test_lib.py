@@ -55,5 +55,12 @@ class TestLib(unittest.TestCase):
         self.maxDiff = None
 
         self.assertEqual(
-            expected, serialize_shelfe(module_to_shelf(sys.modules[self.__module__]))
+            expected,
+            serialize_shelfe(
+                module_to_shelf(
+                    sys.modules[self.__module__],
+                    # name has to be set since the module name changes for different test settings
+                    name="test_lib",
+                )
+            ),
         )
