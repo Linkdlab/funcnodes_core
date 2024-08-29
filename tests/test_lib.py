@@ -3,7 +3,7 @@
 import unittest
 import sys
 from funcnodes_core.nodemaker import NodeDecorator
-from funcnodes_core.lib import module_to_shelf, serialize_shelfe
+from funcnodes_core.lib import module_to_shelf, serialize_shelfe, flatten_shelf, Shelf
 
 
 @NodeDecorator("test_lib_testfunc")
@@ -64,3 +64,26 @@ class TestLib(unittest.TestCase):
                 )
             ),
         )
+
+    def test_flatten_shelf(self):
+        shelf = Shelf(
+            nodes=[testfunc],
+            name="0",
+            description="level 0",
+            subshelves=[
+                Shelf(
+                    nodes=[],
+                    name="1",
+                    description="level 1",
+                    subshelves=[
+                        Shelf(
+                            nodes=[testfunc],
+                            name="2",
+                            description="level 2",
+                            subshelves=[],
+                        )
+                    ],
+                )
+            ],
+        )
+        self.assertEqual([testfunc, testfunc], flatten_shelf(shelf))
