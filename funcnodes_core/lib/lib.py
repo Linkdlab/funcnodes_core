@@ -79,6 +79,13 @@ def deep_find_node(shelf: Shelf, nodeid: str, all=True) -> List[List[str]]:
     return paths
 
 
+def flatten_shelf(shelf: Shelf) -> List[Type[Node]]:
+    nodes = list(shelf["nodes"])
+    for subshelf in shelf["subshelves"]:
+        nodes.extend(flatten_shelf(subshelf))
+    return nodes
+
+
 class Library:
     def __init__(self) -> None:
         self._shelves: List[Shelf] = []
