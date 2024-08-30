@@ -1,16 +1,9 @@
 from typing import Optional
 from .lib import Shelf, Node
-from ..config import update_render_options
 import inspect
 from warnings import warn
 from .._logging import FUNCNODES_LOGGER
-
-try:
-    from funcnodes_react_flow import add_react_plugin
-except (ModuleNotFoundError, ImportError):
-
-    def add_react_plugin(*args, **kwargs):
-        pass
+from .._setup import setup_module
 
 
 def module_to_shelf(mod, name: Optional[str] = None) -> Shelf:
@@ -26,22 +19,17 @@ def module_to_shelf(mod, name: Optional[str] = None) -> Shelf:
     if not name:
         name = str(mod)
 
-    if hasattr(mod, "FUNCNODES_RENDER_OPTIONS"):
-        update_render_options(mod.FUNCNODES_RENDER_OPTIONS)
+    mod_data = setup_module({"module": mod})
 
-    if hasattr(mod, "REACT_PLUGIN"):
-        add_react_plugin(mod, mod.REACT_PLUGIN)
-
-    for sn in ["NODE_SHELF", "NODE_SHELFE"]:  # typo in the original code
-        if hasattr(mod, sn):
-            shelf = getattr(mod, sn)
-            if (
-                isinstance(shelf, dict)
-                and "nodes" in shelf
-                and "subshelves" in shelf
-                and "name" in shelf
-            ):
-                return shelf
+    if "shelf" in mod_data:
+        shelf = mod_data["shelf"]
+        if (
+            isinstance(shelf, dict)
+            and "nodes" in shelf
+            and "subshelves" in shelf
+            and "name" in shelf
+        ):
+            return shelf
 
     shelf = Shelf(nodes=[], subshelves=[], name=name, description=mod.__doc__)
 

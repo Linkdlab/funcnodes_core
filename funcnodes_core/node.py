@@ -49,6 +49,10 @@ from funcnodes_core._logging import get_logger, FUNCNODES_LOGGER
 triggerlogger = get_logger("trigger")
 
 
+class IONotFoundError(KeyError):
+    pass
+
+
 class NodeTriggerError(Exception):
     @classmethod
     def from_error(cls, error: Exception):
@@ -731,7 +735,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         for ip in self._inputs:
             if ip.uuid == uuid:
                 return ip
-        raise KeyError(f"Input with uuid {uuid} not found")
+        raise IONotFoundError(f"Input with uuid {uuid} not found")
 
     def get_output(self, uuid: str) -> NodeOutput:
         """Returns the output with the given uuid.
@@ -745,7 +749,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         for op in self._outputs:
             if op.uuid == uuid:
                 return op
-        raise KeyError(f"Output with uuid {uuid} not found")
+        raise IONotFoundError(f"Output with uuid {uuid} not found")
 
     def get_input_or_output(self, uuid: str) -> NodeInput | NodeOutput:
         """Returns the input or output with the given uuid.
@@ -759,13 +763,13 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
 
         try:
             return self.get_input(uuid)
-        except KeyError:
+        except IONotFoundError:
             pass
         try:
             return self.get_output(uuid)
-        except KeyError:
+        except IONotFoundError:
             pass
-        raise KeyError(f"Input or Output with uuid {uuid} not found")
+        raise IONotFoundError(f"Input or Output with uuid {uuid} not found")
 
     # endregion input/output methods
 
@@ -918,6 +922,17 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
 
     def __del__(self):
         self.prepdelete()
+
+    def __getitem__(self, item):
+        return self.get_input_or_output(item)
+
+    def __setitem__(self, key, value):
+        if key in self.inputs:
+            self.inputs[key].value = value
+        elif key in self.outputs:
+            self.outputs[key].value = value
+        else:
+            raise KeyError(f"No input or output named '{key}' found.")
 
 
 class NodeReadyState(TypedDict):

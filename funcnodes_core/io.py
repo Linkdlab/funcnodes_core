@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import (
+    Dict,
     Optional,
     TypedDict,
     List,
@@ -26,6 +27,7 @@ from .eventmanager import (
     emit_before,
     emit_after,
     EventEmitterMixin,
+    EventCallback,
 )
 from .triggerstack import TriggerStack
 from .utils.data import deep_fill_dict, deep_remove_dict_on_equal
@@ -357,6 +359,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
         is_input: Optional[bool] = None,  # catch and ignore
         value: Optional[Any] = None,  # catch and ignore
         emit_value_set: bool = True,
+        on: Optional[Dict[str, EventCallback]] = None,
         #  **kwargs,
     ) -> None:
         """Initializes a new instance of NodeIO.
@@ -398,6 +401,10 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             self._sertype, value_options
         )
         self._emit_value_set = emit_value_set
+
+        if on is not None:
+            for event, callback in on.items():
+                self.on(event, callback)
 
     def deserialize(self, data: NodeIOSerialization) -> None:
         if "name" in data:
