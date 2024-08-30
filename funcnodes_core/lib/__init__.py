@@ -6,6 +6,7 @@ from .lib import (
     NodeClassNotFoundError,
     get_node_in_shelf,
     flatten_shelf,
+    check_shelf,
 )
 
 from .libparser import module_to_shelf
@@ -24,4 +25,5 @@ __all__ = [
     "get_node_in_shelf",
     "ShelfDict",
     "flatten_shelf",
+    "check_shelf",
 ]

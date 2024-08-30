@@ -1,4 +1,4 @@
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 
 from .io import (
@@ -13,8 +13,8 @@ from .io import (
     SameNodeConnectionError,
     NodeIOSerialization,
 )
-from .utils import run_until_complete, JSONEncoder, JSONDecoder
-from .node import Node, get_nodeclass, NodeJSON
+
+from .node import Node, get_nodeclass, NodeJSON, IONotFoundError
 from .nodespace import NodeSpace, FullNodeSpaceJSON, NodeSpaceJSON
 from .lib import (
     FullLibJSON,
@@ -32,9 +32,17 @@ from .data import DataEnum
 from . import config
 from .config import RenderOptions
 
-from .utils import special_types as types
+from .utils import (
+    special_types as types,
+    run_until_complete,
+    JSONEncoder,
+    JSONDecoder,
+)
+
+from . import decorator
 
 from exposedfunctionality import add_type
+from ._setup import setup
 
 __all__ = [
     "NodeInput",
@@ -72,4 +80,7 @@ __all__ = [
     "types",
     "NodeIOSerialization",
     "flatten_shelf",
+    "IONotFoundError",
+    "decorator",
+    "setup",
 ]
