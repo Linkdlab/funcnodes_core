@@ -2,6 +2,7 @@ from typing import Callable, Any, Union, Tuple, List, Dict, Optional
 import json
 import base64
 
+import dataclasses
 
 VALID_JSON_TYPE = Union[int, float, str, bool, list, dict, type(None)]
 
@@ -206,3 +207,15 @@ def bytes_handler(obj, preview=False):
 
 
 JSONEncoder.add_encoder(bytes_handler)
+
+
+def dataclass_handler(obj, preview=False):
+    """
+    Encodes dataclasses to dictionaries.
+    """
+    if dataclasses.is_dataclass(obj):
+        return dataclasses.asdict(obj), True
+    return obj, False
+
+
+JSONEncoder.add_encoder(dataclass_handler)
