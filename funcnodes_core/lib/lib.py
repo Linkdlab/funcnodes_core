@@ -86,6 +86,24 @@ def flatten_shelf(shelf: Shelf) -> List[Type[Node]]:
     return nodes
 
 
+def check_shelf(shelf: Shelf):
+    # make shure required properties are present
+    if "nodes" not in shelf:
+        shelf["nodes"] = []
+    if "subshelves" not in shelf:
+        shelf["subshelves"] = []
+    if "name" not in shelf:
+        shelf["name"] = "Unnamed Shelf"
+    if "description" not in shelf:
+        shelf["description"] = ""
+
+    for node in shelf["nodes"]:
+        if not issubclass(node, Node):
+            raise ValueError(f"Node {node} is not a subclass of Node")
+    for subshelf in shelf["subshelves"]:
+        check_shelf(subshelf)
+
+
 class Library:
     def __init__(self) -> None:
         self._shelves: List[Shelf] = []
