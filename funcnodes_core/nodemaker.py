@@ -3,7 +3,6 @@ from abc import ABC
 from typing import (
     Callable,
     Type,
-    Coroutine,
     Any,
     Dict,
     List,
@@ -13,7 +12,7 @@ from typing import (
 import inspect
 from exposedfunctionality import assure_exposed_method
 from exposedfunctionality.func import ExposedMethodKwargs, ExposedMethodKwargsKeys
-from exposedfunctionality.function_parser.types import ReturnType, ExposedFunction
+from exposedfunctionality.function_parser.types import ReturnType
 from .node import (
     Node,
     NodeClassDictsKeys,
@@ -22,8 +21,12 @@ from .node import (
     NodeMeta,
 )
 from .io import NodeInput, NodeOutput
-import asyncio
 from functools import wraps, partial
+from .utils.functions import (
+    make_run_in_new_thread,
+    make_run_in_new_process,
+    make_async_if_needed,
+)
 
 from weakref import WeakValueDictionary
 
@@ -38,6 +41,7 @@ def node_class_maker(
     func: Callable[..., ReturnType] = None,
     superclass: Type[Node] = Node,
     seperate_thread: bool = False,
+    separate_process: bool = False,
     **kwargs: Unpack[NodeClassDict],
 ) -> Type[Node]:
     """
@@ -65,6 +69,10 @@ def node_class_maker(
         else:
             kwargs["node_id"] = id
     in_func = assure_exposed_method(func)
+
+    if separate_process and seperate_thread:
+        raise ValueError("seperate_thread and separate_process cannot both be True")
+
     inputs = [
         NodeInput.from_serialized_input(ip)
         for ip in in_func.ef_funcmeta["input_params"]
@@ -74,44 +82,20 @@ def node_class_maker(
         for op in in_func.ef_funcmeta["output_params"]
     ]
 
-    if not asyncio.iscoroutinefunction(in_func):
-        ofunc = in_func
+    if separate_process:
+        asyncfunc = make_run_in_new_process(in_func)
 
-        @wraps(ofunc)
-        async def asyncfunc(*args, **kwargs):
-            """
-            A wrapper for the exposed function that makes it an asynchronous function.
-            """
-            return ofunc(*args, **kwargs)
-
+    elif seperate_thread:
+        asyncfunc = make_run_in_new_thread(in_func)
     else:
-        in_func: ExposedFunction[Coroutine[Any, Any, ReturnType]] = in_func
-        asyncfunc = in_func
-
-    if seperate_thread:
-        oasyncfunc = asyncfunc
-
-        @wraps(oasyncfunc)
-        async def _wrapped_func(*args, **kwargs):
-            """
-            A wrapper for the exposed function that sets the output values of the node.
-            """
-            loop = asyncio.get_event_loop()
-            outs = await loop.run_in_executor(
-                None, lambda: asyncio.run(oasyncfunc(*args, **kwargs))
-            )
-            return outs
-
-        asyncfunc = _wrapped_func
-
-    exfunc: ExposedFunction[Coroutine[Any, Any, ReturnType]] = asyncfunc
+        asyncfunc = make_async_if_needed(in_func)
 
     @wraps(asyncfunc)
     async def _wrapped_func(self: Node, *args, **kwargs):
         """
         A wrapper for the exposed function that sets the output values of the node.
         """
-        outs = await exfunc(*args, **kwargs)
+        outs = await asyncfunc(*args, **kwargs)
         if len(outputs) > 1:
             for op, out in zip(outputs, outs):
                 self.outputs[op.name].value = out
@@ -164,6 +148,7 @@ class NodeDecoratorKwargs(ExposedMethodKwargs, NodeClassDict, total=False):
 
     superclass: Optional[Type[Node]]
     seperate_thread: Optional[bool]
+    separate_process: Optional[bool]
 
 
 def NodeDecorator(
@@ -202,6 +187,7 @@ def NodeDecorator(
             func,
             superclass=kwargs.get("superclass", Node),
             seperate_thread=kwargs.get("seperate_thread", False),
+            separate_process=kwargs.get("separate_process", False),
             **node_class_kwargs,
         )
 
