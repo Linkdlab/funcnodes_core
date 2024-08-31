@@ -31,7 +31,6 @@ def serialize_node_for_saving(node: Node):
         if iod.uuid == "_triggerinput":
             continue
         ioser = dict(serialize_nodeio_for_saving(iod))
-        print(iod.uuid, ioser)
 
         ioser.pop("id", None)
 
