@@ -39,7 +39,7 @@ from .utils import (
     JSONDecoder,
 )
 
-from .utils import make_run_in_new_process, make_run_in_new_thread
+from .utils.functions import make_run_in_new_process, make_run_in_new_thread
 
 from . import decorator
 

@@ -90,8 +90,6 @@ def node_class_maker(
     else:
         asyncfunc = make_async_if_needed(in_func)
 
-    print("AAA", asyncfunc)
-
     @wraps(asyncfunc)
     async def _wrapped_func(self: Node, *args, **kwargs):
         """
