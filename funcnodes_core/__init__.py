@@ -1,4 +1,4 @@
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 
 
 from .io import (
@@ -39,6 +39,8 @@ from .utils import (
     JSONDecoder,
 )
 
+from .utils.functions import make_run_in_new_process, make_run_in_new_thread
+
 from . import decorator
 
 from exposedfunctionality import add_type
@@ -64,6 +66,8 @@ __all__ = [
     "NodeJSON",
     "NodeClassMixin",
     "NodeDecorator",
+    "make_run_in_new_process",
+    "make_run_in_new_thread",
     "Library",
     "find_shelf",
     "JSONEncoder",
