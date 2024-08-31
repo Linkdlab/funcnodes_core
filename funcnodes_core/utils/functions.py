@@ -35,7 +35,11 @@ def _make_async(func: Callable[P, R]) -> Callable[P, Awaitable[R]]:
 
     @wraps(func)
     async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
-        return func(*args, **kwargs)
+        res = func(*args, **kwargs)
+        if asyncio.iscoroutine(res) or asyncio.isfuture(res):
+            return await res
+        else:
+            return res
 
     return wrapper
 
@@ -433,11 +437,6 @@ def make_run_in_new_thread(
         ...
         >>> async_function.shutdown()  # Ensure that the executor is properly shut down
     """
-
-    # check if callable
-    if not callable(func):
-        raise TypeError("The provided function is not callable")
-
     return ThreadExecutorWrapper(func)
 
 
@@ -468,9 +467,4 @@ def make_run_in_new_process(
         ...
         >>> async_function.shutdown()  # Ensure that the executor is properly shut down
     """
-
-    # check if callable
-    if not callable(func):
-        raise TypeError("The provided function is not callable")
-
     return ProcessExecutorWrapper(func)

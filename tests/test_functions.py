@@ -7,15 +7,21 @@ from funcnodes_core.utils.functions import (
     make_async_if_needed,
     call_sync,
 )
-
+import funcnodes_core as fn
 import time
 
 
 def sync_function(x: int) -> int:
+    """
+    A synchronous function that multiplies the input by 2.
+    """
     return x * 2
 
 
 async def async_function(x: int) -> int:
+    """
+    An asynchronous function that multiplies the input by 2.
+    """
     await asyncio.sleep(0.1)
     return x * 2
 
@@ -260,3 +266,175 @@ class TestExecutorWrapper(unittest.IsolatedAsyncioTestCase):
         self.assertLess(result[1], 1)
         self.assertEqual(result[0], 10)
         self.assertGreater(t2, 1)
+
+    async def test_async_as_node(self):
+        """Test an asynchronous function decorated with make_run_in_new_process."""
+        node = fn.NodeDecorator(
+            node_id="test_async_as_node",
+            separate_process=True,
+        )(async_function)()
+
+        node["x"] = 5
+        await node
+
+        self.assertEqual(node["out"].value, 10)
+        self.assertEqual(
+            node.description, "An asynchronous function that multiplies the input by 2."
+        )
+
+        self.assertIsInstance(
+            node.func.__wrapped__, fn.utils.functions.ProcessExecutorWrapper
+        )
+
+        self.assertEqual(node.func.__wrapped__.func, async_function)
+
+    async def test_sync_as_node(self):
+        """Test an asynchronous function decorated with make_run_in_new_process."""
+        node = fn.NodeDecorator(
+            node_id="test_sync_as_node",
+            separate_process=True,
+        )(sync_function)()
+
+        node["x"] = 5
+        await node
+
+        self.assertEqual(node["out"].value, 10)
+        self.assertEqual(
+            node.description, "A synchronous function that multiplies the input by 2."
+        )
+
+        self.assertIsInstance(
+            node.func.__wrapped__, fn.utils.functions.ProcessExecutorWrapper
+        )
+
+        self.assertEqual(node.func.__wrapped__.func, sync_function)
+
+    async def test_async_as_node_thread(self):
+        """Test an asynchronous function decorated with make_run_in_new_process."""
+        node = fn.NodeDecorator(
+            node_id="test_async_as_node_thread",
+            seperate_thread=True,
+        )(async_function)()
+
+        node["x"] = 5
+        await node
+
+        self.assertEqual(node["out"].value, 10)
+        self.assertEqual(
+            node.description, "An asynchronous function that multiplies the input by 2."
+        )
+
+        self.assertIsInstance(
+            node.func.__wrapped__, fn.utils.functions.ThreadExecutorWrapper
+        )
+
+        self.assertEqual(node.func.__wrapped__.func, async_function)
+
+    async def test_sync_as_node_thread(self):
+        """Test an asynchronous function decorated with make_run_in_new_process."""
+        node = fn.NodeDecorator(
+            node_id="test_sync_as_node_thread",
+            seperate_thread=True,
+        )(sync_function)()
+
+        node["x"] = 5
+        await node
+
+        self.assertEqual(node["out"].value, 10)
+        self.assertEqual(
+            node.description, "A synchronous function that multiplies the input by 2."
+        )
+
+        self.assertIsInstance(
+            node.func.__wrapped__, fn.utils.functions.ThreadExecutorWrapper
+        )
+
+        self.assertEqual(node.func.__wrapped__.func, sync_function)
+
+    async def test_async_as_node_dec(self):
+        """Test an asynchronous function decorated with make_run_in_new_process."""
+
+        # wraps twice: to make it sync for process and in the executor wrapper
+        pf = make_run_in_new_process(async_function)
+
+        node = fn.NodeDecorator(
+            node_id="test_async_as_node_dec",
+        )(pf)()
+
+        node["x"] = 5
+        await node
+
+        self.assertEqual(node["out"].value, 10)
+        self.assertEqual(
+            node.description, "An asynchronous function that multiplies the input by 2."
+        )
+
+        self.assertIsInstance(
+            node.func.__wrapped__.__wrapped__, fn.utils.functions.ProcessExecutorWrapper
+        )
+
+        self.assertEqual(node.func.__wrapped__.__wrapped__.func, async_function)
+
+    async def test_sync_as_node_dec(self):
+        """Test an asynchronous function decorated with make_run_in_new_process."""
+        node = fn.NodeDecorator(
+            node_id="test_sync_as_node_dec",
+            separate_process=True,
+        )(make_run_in_new_process(sync_function))()
+
+        node["x"] = 5
+        await node
+
+        self.assertEqual(node["out"].value, 10)
+        self.assertEqual(
+            node.description, "A synchronous function that multiplies the input by 2."
+        )
+
+        self.assertIsInstance(
+            node.func.__wrapped__, fn.utils.functions.ProcessExecutorWrapper
+        )
+
+        self.assertEqual(node.func.__wrapped__.func, sync_function)
+
+    async def test_async_as_node_thread_dec(self):
+        """Test an asynchronous function decorated with make_run_in_new_process."""
+        node = fn.NodeDecorator(
+            node_id="test_async_as_node_thread_dec",
+            seperate_thread=True,
+        )(make_run_in_new_thread(async_function))()
+
+        node["x"] = 5
+        await node
+
+        self.assertEqual(node["out"].value, 10)
+        self.assertEqual(
+            node.description, "An asynchronous function that multiplies the input by 2."
+        )
+
+        self.assertIsInstance(
+            node.func.__wrapped__, fn.utils.functions.ThreadExecutorWrapper
+        )
+
+        self.assertEqual(node.func.__wrapped__.func, async_function)
+
+    async def test_sync_as_node_thread_dec(self):
+        """Test an asynchronous function decorated with make_run_in_new_process."""
+        node = fn.NodeDecorator(
+            node_id="test_sync_as_node_thread_dec",
+            seperate_thread=True,
+        )(make_run_in_new_thread(sync_function))()
+
+        print(node.serialize())
+        node["x"] = 5
+        await node
+
+        self.assertEqual(node["out"].value, 10)
+        self.assertEqual(
+            node.description, "A synchronous function that multiplies the input by 2."
+        )
+
+        self.assertIsInstance(
+            node.func.__wrapped__, fn.utils.functions.ThreadExecutorWrapper
+        )
+
+        self.assertEqual(node.func.__wrapped__.func, sync_function)

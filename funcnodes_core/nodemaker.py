@@ -23,6 +23,7 @@ from .node import (
 from .io import NodeInput, NodeOutput
 from functools import wraps, partial
 from .utils.functions import (
+    ExecutorWrapper,
     make_run_in_new_thread,
     make_run_in_new_process,
     make_async_if_needed,
@@ -84,11 +85,12 @@ def node_class_maker(
 
     if separate_process:
         asyncfunc = make_run_in_new_process(in_func)
-
     elif seperate_thread:
         asyncfunc = make_run_in_new_thread(in_func)
     else:
         asyncfunc = make_async_if_needed(in_func)
+
+    print("AAA", asyncfunc)
 
     @wraps(asyncfunc)
     async def _wrapped_func(self: Node, *args, **kwargs):
@@ -180,7 +182,14 @@ def NodeDecorator(
         }
 
         # Assure the method is exposed for node functionality
+        if isinstance(func, ExecutorWrapper):
+            _func = func.func
+            _func = assure_exposed_method(_func, **exposed_method_kwargs)
+            func.ef_funcmeta = _func.ef_funcmeta
+            func._is_exposed_method = True
+
         func = assure_exposed_method(func, **exposed_method_kwargs)
+
         # Create the node class
         return node_class_maker(
             id,
