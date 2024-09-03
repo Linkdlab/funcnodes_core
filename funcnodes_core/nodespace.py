@@ -114,7 +114,7 @@ class NodeSpace(EventEmitterMixin):
 
     # region serialization
 
-    def full_serialize(self) -> FullNodeSpaceJSON:
+    def full_serialize(self, with_io_values=False) -> FullNodeSpaceJSON:
         """
         Serializes the NodeSpace and all of its nodes and edges.
 
@@ -122,20 +122,22 @@ class NodeSpace(EventEmitterMixin):
           FullNodeSpaceJSON: A JSON object containing the serialized NodeSpace.
         """
         return {
-            "nodes": self.full_nodes_serialize(),
+            "nodes": self.full_nodes_serialize(with_io_values=with_io_values),
             "prop": self._properties,
             "lib": self.lib.full_serialize(),
             "edges": self.serialize_edges(),
         }
 
-    def full_nodes_serialize(self) -> List[FullNodeJSON]:
+    def full_nodes_serialize(self, with_io_values=False) -> List[FullNodeJSON]:
         """
         Serializes all nodes in the NodeSpace.
 
         Returns:
           List[FullNodeJSON]: A list of JSON objects containing the serialized nodes.
         """
-        return [node.full_serialize() for node in self.nodes]
+        return [
+            node.full_serialize(with_io_values=with_io_values) for node in self.nodes
+        ]
 
     def deserialize_nodes(self, data: List[NodeJSON]):
         """

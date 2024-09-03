@@ -390,12 +390,15 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
 
         return ser
 
-    def full_serialize(self) -> FullNodeJSON:
+    def full_serialize(self, with_io_values=False) -> FullNodeJSON:
         ser: FullNodeJSON = {
             "name": self.name,
             "id": self.uuid,
             "node_id": self.node_id,
-            "io": [iod.full_serialize() for iod in self._inputs + self._outputs],
+            "io": [
+                iod.full_serialize(with_value=with_io_values)
+                for iod in self._inputs + self._outputs
+            ],
             "status": self.status(),
             "node_name": self.node_name,
         }
@@ -500,7 +503,9 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         return ser
 
     def _repr_json_(self) -> FullNodeJSON:
-        return JSONEncoder.apply_custom_encoding(self.full_serialize())
+        return JSONEncoder.apply_custom_encoding(
+            self.full_serialize(with_io_values=False)
+        )
 
     # endregion serialization
 
@@ -1107,7 +1112,7 @@ def nodeencoder(obj, preview=False) -> Tuple[Any, bool]:
     Encodes Nodes
     """
     if isinstance(obj, Node):
-        ser: FullNodeJSON = obj.full_serialize()
+        ser: FullNodeJSON = obj.full_serialize(with_io_values=False)
         # io values should be serialized as preview
         serios = []
         for iod in ser["io"]:
