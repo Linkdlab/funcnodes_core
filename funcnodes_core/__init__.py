@@ -1,4 +1,4 @@
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 
 from .io import (
@@ -37,6 +37,7 @@ from .utils import (
     run_until_complete,
     JSONEncoder,
     JSONDecoder,
+    Encdata,
 )
 
 from .utils.functions import make_run_in_new_process, make_run_in_new_thread
@@ -87,4 +88,5 @@ __all__ = [
     "IONotFoundError",
     "decorator",
     "setup",
+    "Encdata",
 ]
