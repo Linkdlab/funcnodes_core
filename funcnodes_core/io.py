@@ -359,7 +359,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
         is_input: Optional[bool] = None,  # catch and ignore
         value: Optional[Any] = None,  # catch and ignore
         emit_value_set: bool = True,
-        on: Optional[Dict[str, EventCallback]] = None,
+        on: Optional[Dict[str, Union[EventCallback, List[EventCallback]]]] = None,
         #  **kwargs,
     ) -> None:
         """Initializes a new instance of NodeIO.
@@ -404,7 +404,11 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
 
         if on is not None:
             for event, callback in on.items():
-                self.on(event, callback)
+                if isinstance(callback, list):
+                    for cb in callback:
+                        self.on(event, cb)
+                else:
+                    self.on(event, callback)
 
     def deserialize(self, data: NodeIOSerialization) -> None:
         if "name" in data:
