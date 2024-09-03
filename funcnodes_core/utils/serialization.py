@@ -150,8 +150,8 @@ class JSONEncoder(json.JSONEncoder):
             # Base types
             return obj
         elif isinstance(obj, str):
-            # if preview and len(obj) > 1000:
-            #     return obj[:1000] + "..."
+            if preview and len(obj) > 1000:
+                return obj[:1000] + "..."
             return obj
         elif isinstance(obj, dict):
             # Handle dictionaries
