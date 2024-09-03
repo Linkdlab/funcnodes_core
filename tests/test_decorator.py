@@ -1,5 +1,6 @@
 import unittest
 import funcnodes_core as fn
+from typing import Tuple
 
 
 class TestDecorator(unittest.IsolatedAsyncioTestCase):
@@ -33,3 +34,52 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
             "Node-key has no value_options.options attribute.",
         )
         self.assertEqual(node["key"].value_options["options"], ["key1", "key2"])
+
+    async def test_update_multiple_value_decorator(self):
+        @fn.NodeDecorator(
+            "test_update_multiple_value_decorator",
+            description="Test decorator for updating value.",
+            default_io_options={
+                "obj": {
+                    "on": {
+                        "after_set_value": [
+                            fn.decorator.update_other_io(
+                                "key1", lambda x: list(x.keys())
+                            ),
+                            fn.decorator.update_other_io(
+                                "key2", lambda x: list(x.keys()) + list(x.keys())
+                            ),
+                        ],
+                    }
+                }
+            },
+        )
+        def select(obj: dict, key1: str, key2: str) -> Tuple[str, str]:
+            return obj[key1], obj[key2]
+
+        node = select()
+        node["obj"] = {"key1": "value1", "key2": "value2"}
+        await node
+
+        self.assertTrue(
+            hasattr(node["key1"], "value_options"),
+            "Node-key1 has no value_options attribute.",
+        )
+        self.assertTrue(
+            "options" in node["key1"].value_options,
+            "Node-key1 has no value_options.options attribute.",
+        )
+        self.assertEqual(node["key1"].value_options["options"], ["key1", "key2"])
+
+        self.assertTrue(
+            hasattr(node["key2"], "value_options"),
+            "Node-key2 has no value_options attribute.",
+        )
+        self.assertTrue(
+            "options" in node["key2"].value_options,
+            "Node-key2 has no value_options.options attribute.",
+        )
+
+        self.assertEqual(
+            node["key2"].value_options["options"], ["key1", "key2", "key1", "key2"]
+        )
