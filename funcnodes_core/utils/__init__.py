@@ -1,5 +1,5 @@
 from .nodeutils import get_deep_connected_nodeset, run_until_complete
-from .serialization import JSONEncoder, JSONDecoder
+from .serialization import JSONEncoder, JSONDecoder, Encdata
 from .data import deep_fill_dict, deep_remove_dict_on_equal
 from . import plugins
 from . import functions
@@ -13,4 +13,5 @@ __all__ = [
     "deep_remove_dict_on_equal",
     "plugins",
     "functions",
+    "Encdata",
 ]
