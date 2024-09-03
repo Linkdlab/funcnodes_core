@@ -638,7 +638,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             del ser["name"]
         return ser
 
-    def full_serialize(self) -> FullNodeIOJSON:
+    def full_serialize(self, with_value=False) -> FullNodeIOJSON:
         """Generates a JSON serializable dictionary of the NodeIO.
 
         Returns
@@ -654,16 +654,19 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             is_input=self.is_input(),
             connected=self.is_connected(),
             node=self.node.uuid if self.node else None,
-            value=self.value,
             does_trigger=self.does_trigger,
             render_options=self.render_options,
             value_options=self.value_options,
         )
+        if with_value:
+            ser["value"] = self.value
 
         return ser
 
     def _repr_json_(self) -> FullNodeIOJSON:
-        return JSONEncoder.apply_custom_encoding(self.full_serialize(), preview=False)  # type: ignore
+        return JSONEncoder.apply_custom_encoding(
+            self.full_serialize(with_value=False), preview=False
+        )  # type: ignore
 
     @property
     def allow_multiple(self) -> bool:
@@ -768,9 +771,9 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         """Sets the value of the NodeIO."""
         self.set_value(value)
 
-    def full_serialize(self) -> FullNodeInputJSON:
+    def full_serialize(self, with_value=False) -> FullNodeInputJSON:
         return FullNodeInputJSON(
-            **super().full_serialize(),
+            **super().full_serialize(with_value=with_value),
             default=self.default,
             required=self.required,
         )
@@ -1067,7 +1070,7 @@ def nodeioencoder(obj, preview=False) -> Tuple[Any, bool]:
     Encodes Nodes
     """
     if isinstance(obj, NodeIO):
-        return obj.full_serialize(), True
+        return obj.full_serialize(with_value=False), True
     return obj, False
 
 
