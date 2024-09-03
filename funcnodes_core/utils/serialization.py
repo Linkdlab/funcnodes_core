@@ -63,9 +63,17 @@ class JSONDecoder(json.JSONDecoder):
         return obj
 
 
+@dataclasses.dataclass
+class Encdata:
+    data: Any
+    done: bool = False
+    handeled: bool = False
+    continue_preview: Optional[bool] = None
+
+
 encodertype = Callable[
     [Any, bool],
-    tuple[Any, bool],
+    Union[tuple[Any, bool], Encdata],
 ]
 
 
@@ -138,9 +146,23 @@ class JSONEncoder(json.JSONEncoder):
             if encoders:
                 for enc in encoders:
                     # try:
-                    res, handled = enc(obj, preview)
-                    if handled:
-                        return cls.apply_custom_encoding(res, preview=preview)
+                    encres = enc(obj, preview)
+
+                    if not isinstance(encres, Encdata):
+                        res, handled = encres
+                        encres = Encdata(data=res, handeled=handled)
+                    if encres.handeled:
+                        if encres.done:
+                            return encres.data
+
+                        return cls.apply_custom_encoding(
+                            encres.data,
+                            preview=(
+                                preview
+                                if encres.continue_preview is None
+                                else encres.continue_preview
+                            ),
+                        )
                 # except Exception as e:
                 #     pass
         if isinstance(obj, (int, float, bool, type(None))):
@@ -150,12 +172,15 @@ class JSONEncoder(json.JSONEncoder):
             # Base types
             return obj
         elif isinstance(obj, str):
-            # if preview and len(obj) > 1000:
-            #     return obj[:1000] + "..."
+            if preview and len(obj) > 1000:
+                return obj[:1000] + "..."
             return obj
         elif isinstance(obj, dict):
             # Handle dictionaries
-            return {key: cls.apply_custom_encoding(value) for key, value in obj.items()}
+            return {
+                key: cls.apply_custom_encoding(value, preview=preview)
+                for key, value in obj.items()
+            }
         elif isinstance(obj, (set, tuple, list)):
             # Handle lists
             obj = list(obj)
@@ -187,8 +212,10 @@ def _repr_json_(obj, preview=False) -> Tuple[Any, bool]:
     Encodes objects that have a _repr_json_ method.
     """
     if hasattr(obj, "_repr_json_"):
-        return obj._repr_json_(), True
-    return obj, False
+        return Encdata(
+            data=obj._repr_json_(), handeled=True, done=True, continue_preview=False
+        )
+    return Encdata(data=obj, handeled=False)
 
 
 JSONEncoder.add_encoder(_repr_json_)
@@ -201,9 +228,13 @@ def bytes_handler(obj, preview=False):
     if isinstance(obj, bytes):
         # Convert bytes to base64 string
         if preview:
-            return base64.b64encode(obj).decode("utf-8"), True
-        return base64.b64encode(obj).decode("utf-8"), True
-    return obj, False
+            return Encdata(
+                done=True, handeled=True, data=base64.b64encode(obj).decode("utf-8")
+            )
+        return Encdata(
+            done=True, handeled=True, data=base64.b64encode(obj).decode("utf-8")
+        )
+    return Encdata(data=obj, handeled=False)
 
 
 JSONEncoder.add_encoder(bytes_handler)
@@ -214,8 +245,8 @@ def dataclass_handler(obj, preview=False):
     Encodes dataclasses to dictionaries.
     """
     if dataclasses.is_dataclass(obj):
-        return dataclasses.asdict(obj), True
-    return obj, False
+        return Encdata(data=dataclasses.asdict(obj), handeled=True)
+    return Encdata(data=obj, handeled=False)
 
 
 JSONEncoder.add_encoder(dataclass_handler)

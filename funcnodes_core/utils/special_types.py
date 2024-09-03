@@ -1,4 +1,4 @@
-from .serialization import JSONEncoder
+from .serialization import JSONEncoder, Encdata
 
 
 class databytes(bytes):
@@ -15,10 +15,8 @@ def databytes_handler(obj, preview=False):
     """
     if isinstance(obj, databytes):
         # Convert bytes to base64 string
-
-        return f"databytes({len(obj)})", True
-        # return base64.b64encode(obj).decode("utf-8"), True
-    return obj, False
+        return Encdata(data=f"databytes({len(obj)})", handeled=True, done=True)
+    return Encdata(data=obj, handeled=False)
 
 
 JSONEncoder.add_encoder(databytes_handler, enc_cls=[databytes])

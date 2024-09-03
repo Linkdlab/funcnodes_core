@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import List, TypedDict, Dict, Type, Tuple, Set
 from funcnodes_core.node import Node, SerializedNodeClass
-from funcnodes_core.utils.serialization import JSONEncoder
+from funcnodes_core.utils.serialization import JSONEncoder, Encdata
 
 
 class NodeClassNotFoundError(Exception):
@@ -243,8 +243,8 @@ class FullLibJSON(TypedDict):
 
 def libencode(obj, preview=False):
     if isinstance(obj, Library):
-        return obj.full_serialize(), True
-    return obj, False
+        return Encdata(data=obj.full_serialize(), handeled=True, done=True)
+    return Encdata(data=obj, handeled=False)
 
 
 JSONEncoder.add_encoder(libencode)
