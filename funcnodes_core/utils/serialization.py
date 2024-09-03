@@ -155,7 +155,10 @@ class JSONEncoder(json.JSONEncoder):
             return obj
         elif isinstance(obj, dict):
             # Handle dictionaries
-            return {key: cls.apply_custom_encoding(value) for key, value in obj.items()}
+            return {
+                key: cls.apply_custom_encoding(value, preview=preview)
+                for key, value in obj.items()
+            }
         elif isinstance(obj, (set, tuple, list)):
             # Handle lists
             obj = list(obj)
