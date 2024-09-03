@@ -19,7 +19,7 @@ from .lib import FullLibJSON, Library, NodeClassNotFoundError, Shelf
 
 
 from .eventmanager import EventEmitterMixin, MessageInArgs, emit_after
-from .utils.serialization import JSONEncoder, JSONDecoder
+from .utils.serialization import JSONEncoder, JSONDecoder, Encdata
 
 
 class NodeException(Exception):
@@ -412,13 +412,21 @@ class NodeSpace(EventEmitterMixin):
 
 def nodespaceendcoder(obj, preview=False):
     if isinstance(obj, NodeSpace):
-        return {
-            "nodes": obj.nodes,
-            "prop": obj._properties,
-            "lib": obj.lib,
-            "edges": obj.serialize_edges(),
-        }, True
-    return obj, False
+        return Encdata(
+            data={
+                "nodes": JSONEncoder.apply_custom_encoding(obj.nodes, preview=False),
+                "prop": JSONEncoder.apply_custom_encoding(
+                    obj._properties, preview=False
+                ),
+                "lib": JSONEncoder.apply_custom_encoding(obj.lib, preview=False),
+                "edges": JSONEncoder.apply_custom_encoding(
+                    obj.serialize_edges(), preview=False
+                ),
+            },
+            handeled=True,
+            done=True,
+        )
+    return Encdata(data=obj, handeled=False)
 
 
 JSONEncoder.add_encoder(nodespaceendcoder)

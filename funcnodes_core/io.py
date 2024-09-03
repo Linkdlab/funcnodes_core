@@ -32,7 +32,7 @@ from .eventmanager import (
 from .triggerstack import TriggerStack
 from .utils.data import deep_fill_dict, deep_remove_dict_on_equal
 
-from .utils.serialization import JSONEncoder, JSONDecoder
+from .utils.serialization import JSONEncoder, JSONDecoder, Encdata
 import json
 import weakref
 
@@ -139,8 +139,8 @@ class InputReadyState(IOReadyState):
 def novalue_endocer(obj, preview=False):
     """Encodes NoValue objects."""
     if obj is NoValue:
-        return "<NoValue>", True
-    return obj, False
+        return Encdata(data="<NoValue>", handeled=True, done=True)
+    return Encdata(data=obj, handeled=False, done=False)
 
 
 def novalue_decoder(obj):
