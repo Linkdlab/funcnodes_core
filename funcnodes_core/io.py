@@ -496,7 +496,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
 
         if self._emit_value_set:
             msg = MessageInArgs(src=self)
-            msg["result"] = JSONEncoder.apply_custom_encoding(self.value, preview=True)
+            msg["result"] = self.value
             self.emit("after_set_value", msg=msg)
         return self.value
 
