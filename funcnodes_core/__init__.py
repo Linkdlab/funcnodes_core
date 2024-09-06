@@ -45,7 +45,7 @@ from .utils.functions import make_run_in_new_process, make_run_in_new_thread
 from . import decorator
 
 from exposedfunctionality import add_type
-from ._setup import setup
+from ._setup import setup, AVAILABLE_MODULES
 
 __all__ = [
     "NodeInput",
@@ -89,4 +89,5 @@ __all__ = [
     "decorator",
     "setup",
     "Encdata",
+    "AVAILABLE_MODULES",
 ]
