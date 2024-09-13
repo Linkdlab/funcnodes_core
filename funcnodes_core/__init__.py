@@ -1,4 +1,4 @@
-__version__ = "0.1.9"
+__version__ = "0.1.10"
 
 
 from .io import (
@@ -14,7 +14,7 @@ from .io import (
     NodeIOSerialization,
 )
 
-from .node import Node, get_nodeclass, NodeJSON, IONotFoundError
+from .node import Node, get_nodeclass, NodeJSON, IONotFoundError, NodeTriggerError
 from .nodespace import NodeSpace, FullNodeSpaceJSON, NodeSpaceJSON
 from .lib import (
     FullLibJSON,
@@ -90,4 +90,5 @@ __all__ = [
     "setup",
     "Encdata",
     "AVAILABLE_MODULES",
+    "NodeTriggerError",
 ]

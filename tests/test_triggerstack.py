@@ -1,6 +1,9 @@
 import asyncio
 import unittest
 from funcnodes_core.triggerstack import TriggerStack  # Replace with your actual import
+from funcnodes_core import NodeDecorator, config, NodeTriggerError
+
+config.IN_NODE_TEST = True
 
 
 class TestTriggerStack(unittest.IsolatedAsyncioTestCase):
@@ -130,6 +133,29 @@ class TestTriggerStack(unittest.IsolatedAsyncioTestCase):
             ["Task3", "Task2", "Task1"],
             "Tasks should be handled in reverse order of their addition to the stack.",
         )
+
+    async def test_node_raises_exception(self):
+        """
+        Test that the check method raises an exception if a task has an exception.
+        """
+
+        @NodeDecorator(
+            "test_node_raises_exception",
+        )
+        def prunetofial() -> int:
+            raise ValueError("Test exception")
+
+        ins = prunetofial()
+        with self.assertRaises(NodeTriggerError):
+            await ins
+
+        config.IN_NODE_TEST = False
+        await ins
+
+        config.IN_NODE_TEST = True
+
+        with self.assertRaises(NodeTriggerError):
+            await ins
 
 
 if __name__ == "__main__":

@@ -139,3 +139,6 @@ def update_render_options(options: RenderOptions):
     deep_fill_dict(
         FUNCNODES_RENDER_OPTIONS, options, merge_lists=True, unfify_lists=True
     )
+
+
+IN_NODE_TEST = bool(os.environ.get("IN_NODE_TEST", False))
