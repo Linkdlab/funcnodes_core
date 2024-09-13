@@ -1,4 +1,5 @@
 import asyncio
+from funcnodes_core import config
 
 
 class TriggerStack:
@@ -28,7 +29,12 @@ class TriggerStack:
         """
         # Remove completed tasks from the end of the stack
         while self._stack and self._stack[-1].done():
-            self._stack.pop()
+            t = self._stack.pop()
+
+            # check if the task has an exception
+            if t.exception() and config.IN_NODE_TEST:
+                # if it does, raise the exception
+                raise t.exception()
 
     def done(self) -> bool:
         """

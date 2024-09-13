@@ -3,8 +3,11 @@ def get_installed_modules():
 
     named_objects = {}
     for ep in pkg_resources.iter_entry_points(group="funcnodes.module"):
-        if ep.module_name not in named_objects:
-            named_objects[ep.module_name] = {}
-        named_objects[ep.module_name][ep.name] = ep.load()
-
+        try:
+            laoded = ep.load()  # should fail first
+            if ep.module_name not in named_objects:
+                named_objects[ep.module_name] = {}
+            named_objects[ep.module_name][ep.name] = laoded
+        except Exception:
+            continue
     return named_objects
