@@ -50,6 +50,10 @@ def setup_module(mod_data):
     return mod_data
 
 
+AVAILABLE_MODULES = {}
+
+
 def setup():
-    for mod in utils.plugins.get_installed_modules().values():
-        setup_module(mod)
+    for name, mod in utils.plugins.get_installed_modules().items():
+        mod = setup_module(mod)
+        AVAILABLE_MODULES[name] = mod
