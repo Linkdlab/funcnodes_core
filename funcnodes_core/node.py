@@ -296,6 +296,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         description="Trigger the node",
         default=None,
         required=False,
+        hidden=True,
     )
 
     _class_io_serialized: Dict[str, NodeIOSerialization]
