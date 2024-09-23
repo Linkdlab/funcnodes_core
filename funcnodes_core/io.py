@@ -533,6 +533,8 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
         Raises:
             NodeConnectionError: If the connection is not allowed.
         """
+        if self.hidden:
+            self.hidden = False
         if other in self._connected:
             return
         try:
