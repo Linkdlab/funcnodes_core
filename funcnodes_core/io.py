@@ -95,6 +95,7 @@ class FullNodeIOJSON(TypedDict):
     does_trigger: bool
     render_options: IORenderOptions
     value_options: ValueOptions
+    hidden: bool
 
 
 class FullNodeInputJSON(FullNodeIOJSON):
@@ -424,6 +425,8 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             self._uuid = data["id"]
         if "value" in data:
             self._value = data["value"]
+        if "hidden" in data:
+            self.hidden = data["hidden"]
 
     def serialize(self, drop=True) -> NodeIOSerialization:
         """Serializes the NodeIO instance to a dictionary.
@@ -532,6 +535,8 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
         Raises:
             NodeConnectionError: If the connection is not allowed.
         """
+        if self.hidden:
+            self.hidden = False
         if other in self._connected:
             return
         try:
@@ -681,6 +686,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             does_trigger=self.does_trigger,
             render_options=self.render_options,
             value_options=self.value_options,
+            hidden=self.hidden,
         )
         if with_value:
             ser["value"] = self.value
