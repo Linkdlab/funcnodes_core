@@ -95,6 +95,7 @@ class FullNodeIOJSON(TypedDict):
     does_trigger: bool
     render_options: IORenderOptions
     value_options: ValueOptions
+    hidden: bool
 
 
 class FullNodeInputJSON(FullNodeIOJSON):
@@ -681,6 +682,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             does_trigger=self.does_trigger,
             render_options=self.render_options,
             value_options=self.value_options,
+            hidden=self.hidden,
         )
         if with_value:
             ser["value"] = self.value
