@@ -56,6 +56,7 @@ class NodeIOSerialization(
     is_input: Required[bool]
     render_options: IORenderOptions
     value_options: ValueOptions
+    hidden: bool
 
 
 class NodeInputSerialization(NodeIOSerialization, total=False):
@@ -289,6 +290,8 @@ class IOOptions(NodeIOSerialization, total=False):
     """Typing definition for Node Input/Output options."""
 
     emit_value_set: bool
+    on: Dict[str, Union[EventCallback, List[EventCallback]]]
+    hidden: bool
 
 
 class NodeInputOptions(IOOptions, NodeInputSerialization, total=False):
@@ -360,6 +363,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
         value: Optional[Any] = None,  # catch and ignore
         emit_value_set: bool = True,
         on: Optional[Dict[str, Union[EventCallback, List[EventCallback]]]] = None,
+        hidden: bool = False,
         #  **kwargs,
     ) -> None:
         """Initializes a new instance of NodeIO.
@@ -393,6 +397,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             )
 
         self._sertype: SerializedType = ser_type
+        self.hidden = hidden
 
         self.eventmanager = AsyncEventManager(self)
         self._value_options: ValueOptions = GenericValueOptions()
@@ -434,6 +439,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             render_options=self.render_options,
             value_options=self.value_options,
             value=self.value,
+            hidden=self.hidden,
         )
         if self._description is not None:
             ser["description"] = self._description
@@ -453,12 +459,26 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             if "value_options" in ser and len(ser["value_options"]) == 0:
                 del ser["value_options"]
 
+            if "hidden" in ser and not ser["hidden"]:
+                del ser["hidden"]
+
         return ser
 
     @property
     def name(self) -> str:
         """Gets the name of the NodeIO."""
         return self._name
+
+    @name.setter
+    def name(self, name: str) -> None:
+        # asstert name is a string
+        # if None or empty fall back to uuid
+        if name is None:
+            name = self.uuid
+        name = str(name)
+        if len(name) == 0:
+            name = self.uuid
+        self._name = name
 
     @property
     def uuid(self):
