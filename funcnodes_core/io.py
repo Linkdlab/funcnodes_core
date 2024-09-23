@@ -425,6 +425,8 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             self._uuid = data["id"]
         if "value" in data:
             self._value = data["value"]
+        if "hidden" in data:
+            self.hidden = data["hidden"]
 
     def serialize(self, drop=True) -> NodeIOSerialization:
         """Serializes the NodeIO instance to a dictionary.
