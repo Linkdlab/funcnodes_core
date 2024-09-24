@@ -3,7 +3,7 @@ from .lib import Shelf, Node
 import inspect
 from warnings import warn
 from .._logging import FUNCNODES_LOGGER
-from .._setup import setup_module
+from .._setup import setup_module, InstalledModule
 
 
 def module_to_shelf(mod, name: Optional[str] = None) -> Shelf:
@@ -19,7 +19,7 @@ def module_to_shelf(mod, name: Optional[str] = None) -> Shelf:
     if not name:
         name = str(mod)
 
-    mod_data = setup_module({"module": mod})
+    mod_data = setup_module(InstalledModule(module=mod, name=name, entry_points={}))
 
     if "shelf" in mod_data:
         shelf = mod_data["shelf"]
