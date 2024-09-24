@@ -3,10 +3,10 @@
 import unittest
 import sys
 from funcnodes_core.nodemaker import NodeDecorator
-from funcnodes_core.lib import module_to_shelf, serialize_shelfe, flatten_shelf, Shelf
+from funcnodes_core.lib import module_to_shelf, serialize_shelfe
 
 
-@NodeDecorator("test_lib_testfunc")
+@NodeDecorator("test_lib_testfunc2")
 def testfunc(int: int, str: str) -> str:
     """Test function for testing the lib module.
     Args:
@@ -19,22 +19,14 @@ def testfunc(int: int, str: str) -> str:
     return str * int
 
 
-NODE_SHELF = {
-    "description": "Tests for the lib module.",
-    "name": "test_lib",
-    "nodes": [testfunc],
-    "subshelves": [],
-}
-
-
-class TestLib(unittest.TestCase):
+class TestLib2(unittest.TestCase):
     def test_module_to_shelf(self):
         expected = {
             "description": "Tests for the lib module.",
             "name": "test_lib",
             "nodes": [
                 {
-                    "node_id": "test_lib_testfunc",
+                    "node_id": "test_lib_testfunc2",
                     "description": "Test function for testing the lib module.",
                     "node_name": "testfunc",
                     "inputs": [
@@ -72,26 +64,3 @@ class TestLib(unittest.TestCase):
                 )
             ),
         )
-
-    def test_flatten_shelf(self):
-        shelf = Shelf(
-            nodes=[testfunc],
-            name="0",
-            description="level 0",
-            subshelves=[
-                Shelf(
-                    nodes=[],
-                    name="1",
-                    description="level 1",
-                    subshelves=[
-                        Shelf(
-                            nodes=[testfunc],
-                            name="2",
-                            description="level 2",
-                            subshelves=[],
-                        )
-                    ],
-                )
-            ],
-        )
-        self.assertEqual([testfunc, testfunc], flatten_shelf(shelf))

@@ -21,8 +21,8 @@ def module_to_shelf(mod, name: Optional[str] = None) -> Shelf:
 
     mod_data = setup_module(InstalledModule(module=mod, name=name, entry_points={}))
 
-    if "shelf" in mod_data:
-        shelf = mod_data["shelf"]
+    if "shelf" in mod_data["entry_points"]:
+        shelf = mod_data["entry_points"]["shelf"]
         if (
             isinstance(shelf, dict)
             and "nodes" in shelf
