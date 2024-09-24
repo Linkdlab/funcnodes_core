@@ -12,7 +12,7 @@ from typing import (
 import inspect
 from exposedfunctionality import assure_exposed_method
 from exposedfunctionality.func import ExposedMethodKwargs, ExposedMethodKwargsKeys
-from exposedfunctionality.function_parser.types import ReturnType
+from exposedfunctionality.function_parser import ReturnType
 from .node import (
     Node,
     NodeClassDictsKeys,
