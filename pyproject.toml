@@ -7,7 +7,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.11"
-exposedfunctionality = ">=0.3.10"
+exposedfunctionality = ">=0.3.11"
 python-dotenv = "*"
 setuptools = "*"
 dill = "*"
