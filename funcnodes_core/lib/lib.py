@@ -128,6 +128,11 @@ class Library:
         self._shelves.append(shelf)
         return shelf
 
+    def remove_shelf(self, shelf: Shelf):
+        if shelf not in self._shelves:
+            raise ValueError("Shelf does not exist")
+        self._shelves.remove(shelf)
+
     def add_shelf_recursively(self, path: List[str]):
         subshelfes: List[Shelf] = self._shelves
         current_shelf = None
