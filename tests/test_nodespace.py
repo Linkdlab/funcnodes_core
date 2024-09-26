@@ -1,5 +1,5 @@
 import unittest
-from funcnodes_core import NodeSpace, Node, NodeInput, NodeOutput
+from funcnodes_core import NodeSpace, Node, NodeInput, NodeOutput, Shelf
 import gc
 
 
@@ -13,10 +13,37 @@ class DummyNode(Node):
         return input
 
 
+class DummyNode2(Node):
+    node_id = "ns_dummy_node2"
+    node_name = "Dummy Node2"
+    myinput = NodeInput(id="input", type=int, default=1)
+    myoutput = NodeOutput(id="output", type=int)
+
+    async def func(self, input: int) -> int:
+        return input
+
+
 class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.nodespace = NodeSpace()
         self.nodespace.lib.add_node(DummyNode, "basic")
+
+    def test_add_shelf(self):
+        dummy_shelf = Shelf(
+            name="test",
+            description="test",
+            nodes=[DummyNode, DummyNode2],
+            subshelves=[],
+        )
+        self.nodespace.add_shelf(dummy_shelf)
+        self.assertIn(dummy_shelf, self.nodespace.lib.shelves)
+        node = DummyNode2()
+        self.nodespace.add_node_instance(node)
+
+        self.nodespace.remove_shelf(dummy_shelf)
+        self.assertNotIn(dummy_shelf, self.nodespace.lib.shelves)
+
+        self.assertEqual(len(self.nodespace.nodes), 0)
 
     def test_add_node_instance(self):
         node = DummyNode()

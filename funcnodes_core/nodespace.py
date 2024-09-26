@@ -15,7 +15,7 @@ from .node import (
 from .io import NodeInput, NodeOutput
 
 
-from .lib import FullLibJSON, Library, NodeClassNotFoundError, Shelf
+from .lib import FullLibJSON, Library, NodeClassNotFoundError, Shelf, flatten_shelf
 
 
 from .eventmanager import EventEmitterMixin, MessageInArgs, emit_after
@@ -402,6 +402,33 @@ class NodeSpace(EventEmitterMixin):
           Library: The updated library.
         """
         self.lib.add_shelf(shelf)
+        return self.lib
+
+    @emit_after()
+    def remove_shelf(self, shelf: Shelf, with_nodes=True):
+        """
+        Removes a shelf from the nodespace's library.
+        This also removes all nodes in the shelf from the nodespace if they are not used in other shelves.
+
+        Args:
+          shelf (Shelf): The shelf to remove.
+            with_nodes (bool): Whether to remove the nodes in the shelf from the nodespace. Defaults to True.
+
+        Returns:
+          Library: The updated library.
+        """
+
+        self.lib.remove_shelf(shelf)
+        if with_nodes:
+            nodes = flatten_shelf(shelf)
+
+            for node in nodes:
+                try:
+                    self.lib.get_node_by_id(node.node_id)
+                except NodeClassNotFoundError:
+                    for node in self.nodes:
+                        if node.node_id == node.node_id:
+                            self.remove_node_instance(node)
         return self.lib
 
     # endregion lib
