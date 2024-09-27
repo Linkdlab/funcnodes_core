@@ -74,7 +74,9 @@ def find_shelf_from_module(
 
         # submodules = strmod.split(".")
 
-        module = importlib.import_module(strmod)
+        module = importlib.import_module(
+            strmod.replace("-", "_")
+        )  # replace - with _ to avoid import errors
         # reload module to get the latest version
         try:
             importlib.reload(module)
