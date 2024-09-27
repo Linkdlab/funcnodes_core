@@ -37,13 +37,13 @@ class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
         )
         self.nodespace.add_shelf(dummy_shelf)
         self.assertIn(dummy_shelf, self.nodespace.lib.shelves)
-        node = DummyNode2()
-        self.nodespace.add_node_instance(node)
+        self.nodespace.add_node_instance(DummyNode2())
+        self.nodespace.add_node_instance(DummyNode())
 
         self.nodespace.remove_shelf(dummy_shelf)
         self.assertNotIn(dummy_shelf, self.nodespace.lib.shelves)
 
-        self.assertEqual(len(self.nodespace.nodes), 0)
+        self.assertEqual(len(self.nodespace.nodes), 1)
 
     def test_add_node_instance(self):
         node = DummyNode()
