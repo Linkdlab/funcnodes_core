@@ -428,7 +428,7 @@ class NodeSpace(EventEmitterMixin):
                 except NodeClassNotFoundError:
                     for nodespacenode in self.nodes:
                         if nodespacenode.node_id == node.node_id:
-                            self.remove_node_instance(node)
+                            self.remove_node_instance(nodespacenode)
         return self.lib
 
     # endregion lib
