@@ -1,8 +1,7 @@
-from typing import TypedDict
 import os
 import json
 from .utils import deep_fill_dict
-
+from .utils.plugins import RenderOptions
 from dotenv import load_dotenv
 from exposedfunctionality.function_parser.types import type_to_string
 
@@ -74,19 +73,6 @@ def check_config_dir():
 
 
 check_config_dir()
-
-
-class RenderOptions(TypedDict, total=False):
-    """
-    A typed dictionary for render options.
-
-    Attributes:
-      typemap (dict[str, str]): A dictionary mapping types to strings.
-      inputconverter (dict[str, str]): A dictionary mapping input types to strings.
-    """
-
-    typemap: dict[str, str]
-    inputconverter: dict[str, str]
 
 
 FUNCNODES_RENDER_OPTIONS: RenderOptions = {"typemap": {}, "inputconverter": {}}

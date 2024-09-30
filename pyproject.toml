@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "funcnodes-core"
-version = "0.1.18"
+version = "0.1.19"
 description = "core package for funcnodes"
 authors = ["Julian Kimmig <julian.kimmig@linkdlab.de>"]
 readme = "README.md"
