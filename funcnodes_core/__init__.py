@@ -1,5 +1,4 @@
-__version__ = "0.1.18"
-
+__version__ = "0.1.19"
 
 from .io import (
     NodeInput,
@@ -30,7 +29,6 @@ from ._logging import FUNCNODES_LOGGER, get_logger
 from .data import DataEnum
 
 from . import config
-from .config import RenderOptions
 
 from .utils import (
     special_types as types,
@@ -39,6 +37,8 @@ from .utils import (
     JSONDecoder,
     Encdata,
 )
+
+from .utils.plugins import RenderOptions
 
 from .utils.functions import make_run_in_new_process, make_run_in_new_thread
 
