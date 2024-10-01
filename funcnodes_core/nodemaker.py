@@ -365,16 +365,11 @@ class NodeClassNode(Node, ABC, metaclass=NodeClassNodeMeta):
         super().__init__(*args, **kwargs)
         self.__class__._instances[self.uuid] = self
 
-    def __del__(self):
-        """
-        Deletes the NodeClassNode instance.
-        Side Effects:
-          De
-        """
+    def cleanup(self):
         if self.uuid in self.__class__._instances:
             # delete the instance from the class reference
             del self.__class__._instances[self.uuid]
-        super().__del__()
+        return super().cleanup()
 
 
 def _create_node(nodeclassmixininst: NodeClassMixin, method, method_name):
