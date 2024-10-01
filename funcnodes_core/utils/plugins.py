@@ -25,19 +25,6 @@ class RenderOptions(TypedDict, total=False):
     inputconverter: dict[str, str]
 
 
-class LoadedModule(TypedDict):
-    """
-    TypedDict for an individual loaded module.
-
-    Attributes:
-        name (str): The name of the entry point.
-        object (Any): The actual object loaded from the entry point.
-    """
-
-    name: str
-    object: Any
-
-
 @dataclass
 class InstalledModule:
     """
@@ -51,7 +38,7 @@ class InstalledModule:
     name: str
     module: Any
     description: Optional[str] = None
-    entry_points: Dict[str, LoadedModule] = field(default_factory=dict)
+    entry_points: Dict[str, Any] = field(default_factory=dict)
     react_plugin: Optional[ReactPlugin] = None
     render_options: Optional[RenderOptions] = None
 
@@ -80,10 +67,7 @@ def get_installed_modules() -> Dict[str, InstalledModule]:
                     module=None,
                 )
 
-            named_objects[ep.module_name].entry_points[ep.name] = {
-                "name": ep.name,
-                "object": loaded,
-            }
+            named_objects[ep.module_name].entry_points[ep.name] = loaded
             if ep.name == "module":
                 named_objects[ep.module_name].module = loaded
 
