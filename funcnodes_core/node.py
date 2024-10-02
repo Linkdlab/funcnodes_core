@@ -14,6 +14,7 @@ from abc import ABC, ABCMeta, abstractmethod
 import asyncio
 import inspect
 from uuid import uuid4
+from weakref import WeakValueDictionary
 from .exceptions import NodeIdAlreadyExistsError
 from .io import (
     NodeInput,
@@ -1010,7 +1011,7 @@ class FullNodeJSON(BaseNodeJSON):
 
 
 # region node registry
-REGISTERED_NODES: Dict[str, Type[Node]] = {}
+REGISTERED_NODES: WeakValueDictionary[str, Type[Node]] = WeakValueDictionary()
 
 
 def _get_node_src(node: Type[Node]) -> str:
