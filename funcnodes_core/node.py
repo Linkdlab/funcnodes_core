@@ -130,6 +130,7 @@ def _parse_nodeclass_io(node: Node):
     outputs = _get_nodeclass_outputs(node)
     for ip in inputs:
         ser: NodeInputOptions = ip.to_dict()
+        ser["class_default"] = ip.default
         node_io_render: NodeInputSerialization = node.render_options.get("io", {}).get(
             ip.uuid, {}
         )
