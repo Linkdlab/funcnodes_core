@@ -195,8 +195,9 @@ class EventEmitterMixin:
     def cleanup(self):
         """Remove all event listeners and perform necessary cleanup before deletion."""
         # Remove specific event listeners
-        for event_name in list(self._events.keys()):
-            self.off(event_name)
+        if hasattr(self, "_events"):
+            for event_name in list(self._events.keys()):
+                self.off(event_name)
 
         # Remove error event listeners
         self.off_error()
