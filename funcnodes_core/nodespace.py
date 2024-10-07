@@ -328,7 +328,7 @@ class NodeSpace(EventEmitterMixin):
         msg = MessageInArgs(node=node.uuid)
         self.emit("node_removed", msg)
         uuid = node.uuid
-        node.prepdelete()
+        node.cleanup()
         del node
         return uuid
 

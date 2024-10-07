@@ -4,7 +4,6 @@ from typing import (
     Callable,
     Type,
     Any,
-    Dict,
     List,
     Optional,
     Tuple,
@@ -35,6 +34,8 @@ try:
     from typing import Unpack
 except ImportError:
     from typing_extensions import Unpack
+
+from ._logging import FUNCNODES_LOGGER
 
 
 def node_class_maker(
@@ -365,16 +366,11 @@ class NodeClassNode(Node, ABC, metaclass=NodeClassNodeMeta):
         super().__init__(*args, **kwargs)
         self.__class__._instances[self.uuid] = self
 
-    def __del__(self):
-        """
-        Deletes the NodeClassNode instance.
-        Side Effects:
-          De
-        """
+    def cleanup(self):
         if self.uuid in self.__class__._instances:
             # delete the instance from the class reference
             del self.__class__._instances[self.uuid]
-        super().__del__()
+        return super().cleanup()
 
 
 def _create_node(nodeclassmixininst: NodeClassMixin, method, method_name):
@@ -424,7 +420,9 @@ def _create_node(nodeclassmixininst: NodeClassMixin, method, method_name):
     partial_method = wraps(method)(partial(method, nodeclassmixininst))
 
     # create the node class
-    nodeclass: Type[Node] = NodeDecorator(**_node_create_params)(partial_method)
+    nodeclass: Type[NodeClassNode] = NodeDecorator(**_node_create_params)(
+        partial_method
+    )
 
     if not issubclass(nodeclass, NodeClassNode):
         raise ValueError("node class is not a subclass of NodeClassNode")
@@ -486,7 +484,7 @@ def get_all_nodefunctions(
 class NodeClassMixin(ABC):
     """
     The NodeClassMixin can be used on any class to
-    transform transform its methods into node classes.
+    transform its methods into node classes.
     Each instance of the class will have its own Nodeclassess,
     making them independend from each other.
     This is especially useful for creating nodes that are
@@ -541,11 +539,12 @@ class NodeClassMixin(ABC):
         if getattr(self, "IS_ABSTRACT", False):
             raise ValueError("Cannot instantiate abstract NodeClassMixin")
         super().__init__(*args, **kwargs)
-        self._node_classes: Dict[
+        self._node_classes: WeakValueDictionary[
             str, Type[NodeClassNode]
         ] = {}  # maps method names to node classes
         self._uuid = None
         self._nodes_created = False
+        self._name = None
 
         for method, name in get_all_nodefunctions(self.__class__):
             if hasattr(method, "_is_instance_nodefunction"):
@@ -577,6 +576,16 @@ class NodeClassMixin(ABC):
         if self._uuid is not None:
             raise ValueError("uuid already set")
         self._uuid = value
+
+    @property
+    def name(self):
+        if not self._name:
+            return f"{self.__class__.__name__}({self.uuid})"
+        return str(self._name)
+
+    @name.setter
+    def name(self, value):
+        self._name = value
 
     def create_nodes(self) -> None:
         """
@@ -648,3 +657,16 @@ class NodeClassMixin(ABC):
                 list(m._instances.values())  # pylint: disable=protected-access
             )
         return nodes
+
+    def cleanup(self):
+        for node in self.get_all_nodes():
+            del node  # node.__del__
+
+        for k in list(self._node_classes):
+            try:
+                del self._node_classes[k]
+            except Exception as e:
+                FUNCNODES_LOGGER.exception(e)
+
+    def __del__(self):
+        self.cleanup()

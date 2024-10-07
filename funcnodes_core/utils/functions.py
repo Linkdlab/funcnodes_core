@@ -292,7 +292,8 @@ class ExecutorWrapper(Generic[P, R]):
         This method ensures that the executor is properly shut down when the `ExecutorWrapper`
         object is garbage collected, preventing resource leaks.
         """
-        self.executor.shutdown(wait=True)
+        if hasattr(self, "executor"):
+            self.executor.shutdown(wait=True)
 
     def shutdown(self):
         """

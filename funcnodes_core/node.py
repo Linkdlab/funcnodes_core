@@ -1,4 +1,5 @@
 from __future__ import annotations
+import gc
 from typing import (
     Dict,
     Type,
@@ -14,6 +15,7 @@ from abc import ABC, ABCMeta, abstractmethod
 import asyncio
 import inspect
 from uuid import uuid4
+from weakref import WeakValueDictionary
 from .exceptions import NodeIdAlreadyExistsError
 from .io import (
     NodeInput,
@@ -40,10 +42,10 @@ from .eventmanager import (
 )
 from .utils.serialization import JSONEncoder
 
-from .utils import (
-    run_until_complete,
+from .utils.data import (
     deep_fill_dict,
 )
+from .utils.nodeutils import run_until_complete
 from funcnodes_core._logging import get_logger, FUNCNODES_LOGGER
 
 triggerlogger = get_logger("trigger")
@@ -918,16 +920,16 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
 
     # endregion triggering
 
-    def prepdelete(self):
+    def cleanup(self):
         for ip in list(self._inputs):
             self.remove_input(ip)
         self._inputs.clear()
         for op in list(self._outputs):
             self.remove_output(op)
-        self.cleanup()
+        super().cleanup()
 
     def __del__(self):
-        self.prepdelete()
+        self.cleanup()
 
     def __getitem__(self, item):
         return self.get_input_or_output(item)
@@ -1010,7 +1012,7 @@ class FullNodeJSON(BaseNodeJSON):
 
 
 # region node registry
-REGISTERED_NODES: Dict[str, Type[Node]] = {}
+REGISTERED_NODES: WeakValueDictionary[str, Type[Node]] = WeakValueDictionary()
 
 
 def _get_node_src(node: Type[Node]) -> str:
@@ -1042,6 +1044,9 @@ def register_node(node_class: Type[Node]):
         NodeIdAlreadyExistsError: If a node with the same 'node_id' is already registered.
     """
     node_id = node_class.node_id
+    if node_id in REGISTERED_NODES:
+        gc.collect()  # collect garbage to remove weak references
+
     if node_id in REGISTERED_NODES:
         raise NodeIdAlreadyExistsError(
             f"Node with id '{node_id}' already exists at {_get_node_src(REGISTERED_NODES[node_id])}"

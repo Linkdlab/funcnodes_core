@@ -1,6 +1,7 @@
 from typing import Callable, Any, Union, Tuple, List, Dict, Optional
 import json
 import base64
+import weakref
 
 import dataclasses
 
@@ -175,13 +176,15 @@ class JSONEncoder(json.JSONEncoder):
             if preview and len(obj) > 1000:
                 return obj[:1000] + "..."
             return obj
-        elif isinstance(obj, dict):
+        elif isinstance(
+            obj, (dict, weakref.WeakKeyDictionary, weakref.WeakValueDictionary)
+        ):
             # Handle dictionaries
             return {
                 key: cls.apply_custom_encoding(value, preview=preview)
                 for key, value in obj.items()
             }
-        elif isinstance(obj, (set, tuple, list)):
+        elif isinstance(obj, (set, tuple, list, weakref.WeakSet)):
             # Handle lists
             obj = list(obj)
             if preview:

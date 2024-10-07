@@ -772,6 +772,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         does_trigger: Optional[bool] = None,
         required: Optional[bool] = None,
         default: Union[NodeIOType, NoValueType] = NoValue,
+        class_default: Optional[NodeIOType] = NoValue,
         **kwargs,
     ) -> None:
         """
@@ -790,6 +791,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         )
         self._connected: List[NodeOutput] = self._connected
         self._default = default
+        self._class_default = class_default
 
     @property
     def value(self) -> Union[NodeIOType, NoValueType]:
@@ -809,6 +811,8 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         )
 
     def set_default(self, default: NodeIOType | NoValueType):
+        if default == NoValue:
+            default = self._class_default
         self._default = default
 
     @property
