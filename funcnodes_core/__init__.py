@@ -30,15 +30,12 @@ from .data import DataEnum
 
 from . import config
 
-from .utils import (
-    special_types as types,
-    run_until_complete,
-    JSONEncoder,
-    JSONDecoder,
-    Encdata,
-)
 
-from .utils.plugins import RenderOptions
+from .utils import special_types as types
+from .utils.serialization import JSONDecoder, JSONEncoder, Encdata
+from .utils.nodeutils import get_deep_connected_nodeset, run_until_complete
+
+from .utils.plugins_types import RenderOptions
 
 from .utils.functions import make_run_in_new_process, make_run_in_new_thread
 
@@ -91,4 +88,5 @@ __all__ = [
     "Encdata",
     "AVAILABLE_MODULES",
     "NodeTriggerError",
+    "get_deep_connected_nodeset",
 ]

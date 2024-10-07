@@ -1,7 +1,7 @@
 import os
 import json
-from .utils import deep_fill_dict
-from .utils.plugins import RenderOptions
+from .utils.data import deep_fill_dict
+from .utils.plugins_types import RenderOptions
 from dotenv import load_dotenv
 from exposedfunctionality.function_parser.types import type_to_string
 
