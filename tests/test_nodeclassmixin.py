@@ -50,7 +50,7 @@ class TestNodeClassMixin(unittest.IsolatedAsyncioTestCase):
                 self.a = 1
 
             @fn.instance_nodefunction()
-            def test(self, a=1) -> int:
+            def test(self, a: int = 1) -> int:
                 return self.a + a
 
             @test.triggers
