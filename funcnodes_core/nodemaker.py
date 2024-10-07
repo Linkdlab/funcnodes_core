@@ -357,14 +357,16 @@ class NodeClassNode(Node, ABC, metaclass=NodeClassNodeMeta):
       _instances (WeakValueDictionary): A dictionary of all instances of the node class.
     """
 
-    _instances: WeakValueDictionary[str, NodeClassNode] = WeakValueDictionary()
-
     def __init__(self, *args, **kwargs):
         """
         Initializes a new instance of the NodeClassNode class.
         """
         super().__init__(*args, **kwargs)
         self.__class__._instances[self.uuid] = self
+
+    def __init_subclass__(cls, **kwargs):
+        cls._instances: WeakValueDictionary[str, NodeClassNode] = WeakValueDictionary()
+        return super().__init_subclass__(**kwargs)
 
     def cleanup(self):
         if self.uuid in self.__class__._instances:
