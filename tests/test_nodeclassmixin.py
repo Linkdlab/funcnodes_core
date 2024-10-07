@@ -82,10 +82,8 @@ class TestNodeClassMixin(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(testnode2.outputs["out"].value, 3)
 
     async def test_delete_nodeclassmixin(self):
-        pre_number = len(fn.node.REGISTERED_NODES)
-
         class MyNodeClass(fn.NodeClassMixin):
-            NODECLASSID = "test"
+            NODECLASSID = "test_delete_nodeclassmixin"
 
             @fn.instance_nodefunction()
             def test(self, a: int) -> int:
@@ -95,18 +93,12 @@ class TestNodeClassMixin(unittest.IsolatedAsyncioTestCase):
         ins.uuid = "test"
         ins.get_all_nodeclasses()
 
-        self.assertEqual(
-            len(fn.node.REGISTERED_NODES),
-            pre_number + 1,
-            list(fn.node.REGISTERED_NODES.keys()),
-        )
+        self.assertIn("test_delete_nodeclassmixin.test.test", fn.node.REGISTERED_NODES)
 
         ins.cleanup()
 
         gc.collect()
 
-        self.assertEqual(
-            len(fn.node.REGISTERED_NODES),
-            pre_number,
-            list(fn.node.REGISTERED_NODES.keys()),
+        self.assertNotIn(
+            "test_delete_nodeclassmixin.test.test", fn.node.REGISTERED_NODES
         )
