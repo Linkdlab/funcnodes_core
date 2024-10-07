@@ -420,7 +420,9 @@ def _create_node(nodeclassmixininst: NodeClassMixin, method, method_name):
     partial_method = wraps(method)(partial(method, nodeclassmixininst))
 
     # create the node class
-    nodeclass: Type[Node] = NodeDecorator(**_node_create_params)(partial_method)
+    nodeclass: Type[NodeClassNode] = NodeDecorator(**_node_create_params)(
+        partial_method
+    )
 
     if not issubclass(nodeclass, NodeClassNode):
         raise ValueError("node class is not a subclass of NodeClassNode")
@@ -668,4 +670,3 @@ class NodeClassMixin(ABC):
 
     def __del__(self):
         self.cleanup()
-        super.__del__()
