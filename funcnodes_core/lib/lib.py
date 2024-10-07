@@ -4,6 +4,8 @@ from funcnodes_core.node import Node, SerializedNodeClass
 from funcnodes_core.utils.serialization import JSONEncoder, Encdata
 from dataclasses import dataclass
 
+from ..eventmanager import EventEmitterMixin, emit_after
+
 
 class NodeClassNotFoundError(ValueError):
     pass
@@ -143,7 +145,7 @@ def check_shelf(shelf: Shelf):
     return shelf
 
 
-class Library:
+class Library(EventEmitterMixin):
     def __init__(self) -> None:
         self._shelves: List[Shelf] = []
         self._dependencies: Dict[str, Set[str]] = {
@@ -160,6 +162,7 @@ class Library:
     def get_dependencies(self) -> Dict[str, List[str]]:
         return {k: list(v) for k, v in self._dependencies.items()}
 
+    @emit_after()
     def add_shelf(self, shelf: Shelf):
         shelf = check_shelf(shelf)
         shelf_dict = {s.name: s for s in self._shelves}
@@ -168,6 +171,7 @@ class Library:
         self._shelves.append(shelf)
         return shelf
 
+    @emit_after()
     def remove_shelf(self, shelf: Shelf):
         if shelf not in self._shelves:
             raise ValueError("Shelf does not exist")
@@ -206,6 +210,7 @@ class Library:
     def _repr_json_(self) -> FullLibJSON:
         return self.full_serialize()
 
+    @emit_after()
     def add_nodes(
         self,
         nodes: List[Type[Node]],
@@ -256,6 +261,7 @@ class Library:
     def find_nodeclass(self, node: Type[Node], all=True) -> List[List[str]]:
         return self.find_nodeid(node.node_id, all=all)
 
+    @emit_after()
     def remove_nodeclass(self, node: Type[Node]):
         paths = self.find_nodeclass(node)
         for path in paths:
