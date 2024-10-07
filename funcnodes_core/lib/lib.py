@@ -1,9 +1,9 @@
 from __future__ import annotations
-from typing import List, TypedDict, Dict, Type, Tuple, Set
+from typing import List, Optional, TypedDict, Dict, Type, Tuple, Set
 from funcnodes_core.node import Node, SerializedNodeClass
 from funcnodes_core.utils.serialization import JSONEncoder, Encdata
 from dataclasses import dataclass
-
+from weakref import ReferenceType, ref
 from ..eventmanager import EventEmitterMixin, emit_after
 
 
@@ -37,6 +37,103 @@ class Shelf:
             name=data["name"],
             description=data.get("description", ""),
         )
+
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, Shelf):
+            return False
+
+        if self.name != value.name:
+            return False
+        if self.description != value.description:
+            return False
+
+        if len(self.nodes) != len(value.nodes):
+            return False
+
+        if len(self.subshelves) != len(value.subshelves):
+            return False
+
+        for i, node in enumerate(self.nodes):
+            if node != value.nodes[i]:
+                return False
+
+        for i, subshelf in enumerate(self.subshelves):
+            if subshelf != value.subshelves[i]:
+                return False
+
+        return True
+
+    def add_node(self, node: Type[Node]):
+        self.nodes.append(node)
+
+    def add_subshelf(self, shelf: Shelf):
+        self.subshelves.append(shelf)
+
+
+@dataclass
+class _InnerShelf:
+    nodes_ref: List[ReferenceType[Type[Node]]]
+    inner_subshelves: List[_InnerShelf]
+    name: str
+    description: str
+    shelf: Optional[ReferenceType[Shelf]] = None
+
+    @property
+    def nodes(self) -> List[Type[Node]]:
+        if self.shelf is not None:
+            return self.shelf().nodes
+        return [node() for node in self.nodes_ref if node() is not None]
+
+    @property
+    def subshelves(self) -> List[Shelf]:
+        if self.shelf is not None:
+            return self.shelf().subshelves
+        return [subshelf.to_shelf() for subshelf in self.inner_subshelves]
+
+    @classmethod
+    def from_shelf(cls, shelf: Shelf) -> _InnerShelf:
+        if not isinstance(shelf, Shelf):
+            raise ValueError("shelf must be of type Shelf")
+        return cls(
+            nodes_ref=[ref(node) for node in shelf.nodes],
+            inner_subshelves=[
+                cls.from_shelf(subshelf) for subshelf in shelf.subshelves
+            ],
+            name=shelf.name,
+            description=shelf.description,
+            shelf=ref(shelf),
+        )
+
+    def _check_shelf(self):
+        if self.shelf is not None:
+            if self.shelf() is None:
+                raise ValueError("Shelf reference is lost")
+
+    def to_shelf(self) -> Shelf:
+        self._check_shelf()
+        if self.shelf is not None:
+            return self.shelf()
+
+        return Shelf(
+            nodes=self.nodes,
+            subshelves=self.subshelves,
+            name=self.name,
+            description=self.description,
+        )
+
+    def add_node(self, node: Type[Node]):
+        self._check_shelf()
+        if self.shelf is None:
+            self.nodes_ref.append(ref(node))
+        else:
+            self.shelf().add_node(node)
+
+    def add_subshelf(self, shelf: Shelf):
+        self._check_shelf()
+        if self.shelf is None:
+            self.inner_subshelves.append(shelf)
+        else:
+            self.shelf().add_subshelf(shelf)
 
 
 class SerializedShelf(TypedDict):
@@ -79,7 +176,7 @@ def update_nodes_in_shelf(shelf: Shelf, nodes: List[Type[Node]]):
             i, _ = get_node_in_shelf(shelf, node.node_id)
             shelf.nodes[i] = node
         except NodeClassNotFoundError:
-            shelf.nodes.append(node)
+            shelf.add_node(node)
 
 
 def deep_find_node(shelf: Shelf, nodeid: str, all=True) -> List[List[str]]:
@@ -147,14 +244,14 @@ def check_shelf(shelf: Shelf):
 
 class Library(EventEmitterMixin):
     def __init__(self) -> None:
-        self._shelves: List[Shelf] = []
+        self._shelves: List[_InnerShelf] = []
         self._dependencies: Dict[str, Set[str]] = {
             "modules": set(),
         }
 
     @property
     def shelves(self) -> List[Shelf]:
-        return list(self._shelves)
+        return [shelf.to_shelf() for shelf in self._shelves]
 
     def add_dependency(self, module: str):
         self._dependencies["modules"].add(module)
@@ -166,24 +263,26 @@ class Library(EventEmitterMixin):
     def add_shelf(self, shelf: Shelf):
         shelf = check_shelf(shelf)
         shelf_dict = {s.name: s for s in self._shelves}
-        if shelf.name in shelf_dict and shelf_dict[shelf.name] != shelf:
+        if shelf.name in shelf_dict and shelf_dict[shelf.name].to_shelf() != shelf:
             raise ValueError(f"Shelf with name {shelf['name']} already exists")
-        self._shelves.append(shelf)
+        self._shelves.append(_InnerShelf.from_shelf(shelf))
         return shelf
 
     @emit_after()
     def remove_shelf(self, shelf: Shelf):
-        if shelf not in self._shelves:
-            raise ValueError("Shelf does not exist")
-        self._shelves.remove(shelf)
+        for i, _shelf in enumerate(self._shelves):
+            if _shelf.to_shelf() == shelf:
+                self._shelves.pop(i)
+                return
+        raise ValueError("Shelf does not exist")
 
-    def add_shelf_recursively(self, path: List[str]):
-        subshelfes: List[Shelf] = self._shelves
+    def _add_shelf_recursively(self, path: List[str]):
+        subshelfes = self._shelves
         current_shelf = None
         for _shelf in path:
             if _shelf not in [subshelfes.name for subshelfes in subshelfes]:
-                current_shelf = Shelf(
-                    nodes=[], subshelves=[], name=_shelf, description=""
+                current_shelf = _InnerShelf(
+                    nodes_ref=[], inner_subshelves=[], name=_shelf, description=""
                 )
                 subshelfes.append(current_shelf)
             else:
@@ -201,7 +300,7 @@ class Library(EventEmitterMixin):
     def get_shelf(self, name: str) -> Shelf:
         for shelf in self._shelves:
             if shelf.name == name:
-                return shelf
+                return shelf.to_shelf()
         raise ValueError(f"Shelf with name {name} not found")
 
     def full_serialize(self) -> FullLibJSON:
@@ -222,14 +321,14 @@ class Library(EventEmitterMixin):
         if len(shelf) == 0:
             raise ValueError("shelf must not be empty")
 
-        current_shelf = self.add_shelf_recursively(shelf)
+        current_shelf = self._add_shelf_recursively(shelf)
         update_nodes_in_shelf(current_shelf, nodes)
 
     def add_node(self, node: Type[Node], shelf: str | List[str]):
         self.add_nodes([node], shelf)
 
     def get_shelf_from_path(self, path: List[str]) -> Shelf:
-        subshelfes: List[Shelf] = self._shelves
+        subshelfes = self._shelves
         current_shelf = None
         for _shelf in path:
             new_subshelfes = None
@@ -243,7 +342,7 @@ class Library(EventEmitterMixin):
             subshelfes = new_subshelfes
         if current_shelf is None:
             raise ValueError("shelf must not be empty")
-        return current_shelf
+        return current_shelf.to_shelf()
 
     def find_nodeid(self, nodeid: str, all=True) -> List[List[str]]:
         paths = []
