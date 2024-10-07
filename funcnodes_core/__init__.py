@@ -22,6 +22,7 @@ from .lib import (
     find_shelf,
     NodeClassNotFoundError,
     flatten_shelf,
+    flatten_shelves,
 )
 from .nodemaker import NodeClassMixin, NodeDecorator, instance_nodefunction
 from ._logging import FUNCNODES_LOGGER, get_logger
@@ -82,6 +83,7 @@ __all__ = [
     "types",
     "NodeIOSerialization",
     "flatten_shelf",
+    "flatten_shelves",
     "IONotFoundError",
     "decorator",
     "setup",

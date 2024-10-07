@@ -43,7 +43,7 @@ def setup_module(mod_data: InstalledModule) -> Optional[InstalledModule]:
                 break
     if "shelf" in entry_points:
         try:
-            check_shelf(entry_points["shelf"])
+            entry_points["shelf"] = check_shelf(entry_points["shelf"])
         except ValueError as e:
             FUNCNODES_LOGGER.error("Error in module %s: %s" % (mod.__name__, e))
             del entry_points["shelf"]

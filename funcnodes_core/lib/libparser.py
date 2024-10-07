@@ -46,7 +46,7 @@ def module_to_shelf(mod, name: Optional[str] = None) -> Shelf:
                     f"interfered Node name {obj.__name__} is defined elsewhere in module {mod.__name__}"
                 )
 
-            shelf["nodes"].append(obj)
+            shelf.nodes.append(obj)
     #            if obj.__name__ != name:
     #                shelf["nodes"][name] = obj
     #                if obj.__name__ not in mod_dict:

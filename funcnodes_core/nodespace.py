@@ -420,7 +420,7 @@ class NodeSpace(EventEmitterMixin):
 
         self.lib.remove_shelf(shelf)
         if with_nodes:
-            nodes = flatten_shelf(shelf)
+            nodes, _ = flatten_shelf(shelf)
 
             for node in nodes:
                 try:

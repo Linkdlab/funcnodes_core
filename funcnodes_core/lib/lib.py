@@ -2,17 +2,39 @@ from __future__ import annotations
 from typing import List, TypedDict, Dict, Type, Tuple, Set
 from funcnodes_core.node import Node, SerializedNodeClass
 from funcnodes_core.utils.serialization import JSONEncoder, Encdata
+from dataclasses import dataclass
 
 
-class NodeClassNotFoundError(Exception):
+class NodeClassNotFoundError(ValueError):
     pass
 
 
-class Shelf(TypedDict):
+class ShelfError(Exception):
+    pass
+
+
+@dataclass
+class Shelf:
     nodes: List[Type[Node]]
     subshelves: List[Shelf]
     name: str
     description: str
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> Shelf:
+        if isinstance(data, Shelf):
+            return data
+        if "name" not in data:
+            raise ShelfError("name must be present")
+
+        return cls(
+            nodes=data.get("nodes", []),
+            subshelves=[
+                cls.from_dict(subshelf) for subshelf in data.get("subshelves", [])
+            ],
+            name=data["name"],
+            description=data.get("description", ""),
+        )
 
 
 class SerializedShelf(TypedDict):
@@ -22,17 +44,17 @@ class SerializedShelf(TypedDict):
     description: str
 
 
-def serialize_shelfe(shelve: Shelf) -> SerializedShelf:
+def serialize_shelfe(shelf: Shelf) -> SerializedShelf:
     """
     Serializes a shelf object into a dictionary.
     """
     return {
         "nodes": [
-            node.serialize_cls() for node in shelve["nodes"]
+            node.serialize_cls() for node in shelf.nodes
         ],  # unique nodes, necessary since somtimes nodes are added multiple times if they have aliases
-        "subshelves": [serialize_shelfe(shelf) for shelf in shelve["subshelves"]],
-        "name": shelve["name"],
-        "description": shelve["description"],
+        "subshelves": [serialize_shelfe(shelf) for shelf in shelf.subshelves],
+        "name": shelf.name,
+        "description": shelf.description,
     }
 
 
@@ -40,10 +62,10 @@ def get_node_in_shelf(shelf: Shelf, nodeid: str) -> Tuple[int, Type[Node]]:
     """
     Returns the index and the node with the given id
     """
-    for i, node in enumerate(shelf["nodes"]):
+    for i, node in enumerate(shelf.nodes):
         if node.node_id == nodeid:
             return i, node
-    raise ValueError(f"Node with id {nodeid} not found")
+    raise NodeClassNotFoundError(f"Node with id {nodeid} not found")
 
 
 def update_nodes_in_shelf(shelf: Shelf, nodes: List[Type[Node]]):
@@ -53,55 +75,72 @@ def update_nodes_in_shelf(shelf: Shelf, nodes: List[Type[Node]]):
     for node in nodes:
         try:
             i, _ = get_node_in_shelf(shelf, node.node_id)
-            shelf["nodes"][i] = node
-        except ValueError:
-            shelf["nodes"].append(node)
+            shelf.nodes[i] = node
+        except NodeClassNotFoundError:
+            shelf.nodes.append(node)
 
 
 def deep_find_node(shelf: Shelf, nodeid: str, all=True) -> List[List[str]]:
     paths = []
     try:
         i, node = get_node_in_shelf(shelf, nodeid)
-        paths.append([shelf["name"]])
+        paths.append([shelf.name])
         if not all:
             return paths
     except ValueError:
         pass
 
-    for subshelf in shelf["subshelves"]:
+    for subshelf in shelf.subshelves:
         path = deep_find_node(subshelf, nodeid)
         if len(path) > 0:
             for p in path:
-                p.insert(0, shelf["name"])
+                p.insert(0, shelf.name)
             paths.extend(path)
             if not all:
                 break
     return paths
 
 
-def flatten_shelf(shelf: Shelf) -> List[Type[Node]]:
-    nodes = list(shelf["nodes"])
-    for subshelf in shelf["subshelves"]:
-        nodes.extend(flatten_shelf(subshelf))
-    return nodes
+def flatten_shelf(shelf: Shelf) -> Tuple[List[Type[Node]], List[Shelf]]:
+    nodes: List[Type[Node]] = list(shelf.nodes)
+    shelves: List[Shelf] = [shelf]
+    for subshelf in shelf.subshelves:
+        subnodes, subshelves = flatten_shelf(subshelf)
+        nodes.extend(subnodes)
+        shelves.extend(subshelves)
+    return nodes, shelves
+
+
+def flatten_shelves(shelves: List[Shelf]) -> Tuple[List[Type[Node]], List[Shelf]]:
+    nodes: List[Type[Node]] = []
+    flat_shelves: List[Shelf] = []
+    for shelf in shelves:
+        subnodes, subshelves = flatten_shelf(shelf)
+        nodes.extend(subnodes)
+        flat_shelves.extend(subshelves)
+    return nodes, flat_shelves
 
 
 def check_shelf(shelf: Shelf):
     # make shure required properties are present
-    if "nodes" not in shelf:
-        shelf["nodes"] = []
-    if "subshelves" not in shelf:
-        shelf["subshelves"] = []
-    if "name" not in shelf:
-        shelf["name"] = "Unnamed Shelf"
-    if "description" not in shelf:
-        shelf["description"] = ""
+    if isinstance(shelf, dict):
+        if "nodes" not in shelf:
+            shelf["nodes"] = []
+        if "subshelves" not in shelf:
+            shelf["subshelves"] = []
+        if "name" not in shelf:
+            shelf["name"] = "Unnamed Shelf"
+        if "description" not in shelf:
+            shelf["description"] = ""
 
-    for node in shelf["nodes"]:
+        shelf = Shelf.from_dict(shelf)
+
+    for node in shelf.nodes:
         if not issubclass(node, Node):
             raise ValueError(f"Node {node} is not a subclass of Node")
-    for subshelf in shelf["subshelves"]:
-        check_shelf(subshelf)
+    shelf.subshelves = [check_shelf(subshelf) for subshelf in shelf.subshelves]
+
+    return shelf
 
 
 class Library:
@@ -122,8 +161,9 @@ class Library:
         return {k: list(v) for k, v in self._dependencies.items()}
 
     def add_shelf(self, shelf: Shelf):
-        shelf_dict = {s["name"]: s for s in self._shelves}
-        if shelf["name"] in shelf_dict and shelf_dict[shelf["name"]] != shelf:
+        shelf = check_shelf(shelf)
+        shelf_dict = {s.name: s for s in self._shelves}
+        if shelf.name in shelf_dict and shelf_dict[shelf.name] != shelf:
             raise ValueError(f"Shelf with name {shelf['name']} already exists")
         self._shelves.append(shelf)
         return shelf
@@ -137,26 +177,26 @@ class Library:
         subshelfes: List[Shelf] = self._shelves
         current_shelf = None
         for _shelf in path:
-            if _shelf not in [subshelfes["name"] for subshelfes in subshelfes]:
+            if _shelf not in [subshelfes.name for subshelfes in subshelfes]:
                 current_shelf = Shelf(
                     nodes=[], subshelves=[], name=_shelf, description=""
                 )
                 subshelfes.append(current_shelf)
             else:
                 for subshelf in subshelfes:
-                    if subshelf["name"] == _shelf:
+                    if subshelf.name == _shelf:
                         current_shelf = subshelf
                         break
             if current_shelf is None:
                 raise ValueError("shelf must not be empty")
-            subshelfes = current_shelf["subshelves"]
+            subshelfes = current_shelf.subshelves
         if current_shelf is None:
             raise ValueError("shelf must not be empty")
         return current_shelf
 
     def get_shelf(self, name: str) -> Shelf:
         for shelf in self._shelves:
-            if shelf["name"] == name:
+            if shelf.name == name:
                 return shelf
         raise ValueError(f"Shelf with name {name} not found")
 
@@ -189,8 +229,8 @@ class Library:
         for _shelf in path:
             new_subshelfes = None
             for subshelf in subshelfes:
-                if subshelf["name"] == _shelf:
-                    new_subshelfes = subshelf["subshelves"]
+                if subshelf.name == _shelf:
+                    new_subshelfes = subshelf.subshelves
                     current_shelf = subshelf
                     break
             if new_subshelfes is None:
@@ -221,7 +261,7 @@ class Library:
         for path in paths:
             shelf = self.get_shelf_from_path(path)
             i, _ = get_node_in_shelf(shelf, node.node_id)
-            shelf["nodes"].pop(i)
+            shelf.nodes.pop(i)
 
     def remove_nodeclasses(self, nodes: List[Type[Node]]):
         for node in nodes:
