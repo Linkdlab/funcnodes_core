@@ -1,5 +1,6 @@
 import unittest
 import funcnodes_core as fn
+import gc
 
 
 class TestNodeClassMixin(unittest.IsolatedAsyncioTestCase):
@@ -79,3 +80,33 @@ class TestNodeClassMixin(unittest.IsolatedAsyncioTestCase):
         await testnode2.await_until_complete()
         self.assertEqual(testnode1.outputs["out"].value, 2)
         self.assertEqual(testnode2.outputs["out"].value, 3)
+
+    async def test_delete_nodeclassmixin(self):
+        pre_number = len(fn.node.REGISTERED_NODES)
+
+        class MyNodeClass(fn.NodeClassMixin):
+            NODECLASSID = "test"
+
+            @fn.instance_nodefunction()
+            def test(self, a: int) -> int:
+                return 1
+
+        ins = MyNodeClass()
+        ins.uuid = "test"
+        ins.get_all_nodeclasses()
+
+        self.assertEqual(
+            len(fn.node.REGISTERED_NODES),
+            pre_number + 1,
+            list(fn.node.REGISTERED_NODES.keys()),
+        )
+
+        ins.cleanup()
+
+        gc.collect()
+
+        self.assertEqual(
+            len(fn.node.REGISTERED_NODES),
+            pre_number,
+            list(fn.node.REGISTERED_NODES.keys()),
+        )
