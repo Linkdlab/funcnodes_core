@@ -94,4 +94,4 @@ class TestLib(unittest.TestCase):
                 )
             ],
         )
-        self.assertEqual([testfunc, testfunc], flatten_shelf(shelf))
+        self.assertEqual([testfunc, testfunc], flatten_shelf(shelf)[0])

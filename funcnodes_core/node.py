@@ -921,6 +921,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
     # endregion triggering
 
     def cleanup(self):
+        self.emit("cleanup")
         for ip in list(self._inputs):
             self.remove_input(ip)
         self._inputs.clear()

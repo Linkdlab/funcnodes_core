@@ -1,14 +1,8 @@
 from __future__ import annotations
 from abc import ABC
-from typing import (
-    Callable,
-    Type,
-    Any,
-    List,
-    Optional,
-    Tuple,
-)
+from typing import Callable, Type, Any, List, Optional, Tuple, Dict
 import inspect
+from warnings import warn
 from exposedfunctionality import assure_exposed_method
 from exposedfunctionality.func import ExposedMethodKwargs, ExposedMethodKwargsKeys
 from exposedfunctionality.function_parser import ReturnType
@@ -29,6 +23,7 @@ from .utils.functions import (
 )
 
 from weakref import WeakValueDictionary
+
 
 try:
     from typing import Unpack
@@ -202,6 +197,159 @@ def NodeDecorator(
     return decorator
 
 
+class NodeClassMixinNodeFunction:
+    def __init__(
+        self,
+        function: Callable[..., ReturnType],
+        instance_node_specials: dict,
+        **kwargs,
+    ):
+        kwargs.setdefault("default_trigger_on_create", False)
+        self.function = function
+        self._node_create_params = kwargs
+
+        self._node_create_params = kwargs
+        self._instance_node_specials = instance_node_specials
+
+        self.triggers = trigger_decorator(self)
+        # self.nodes = lambda ins: ins.get_nodes(self.function.__name__)
+        # self.nodeclass = lambda ins: self.get_nodeclass(self.function.__name__)
+
+    @property
+    def name(self):
+        return self.function.__name__
+
+    def nodes(self, ins: NodeClassMixin) -> List[Node]:
+        return ins.get_nodes(self.name)
+
+    def __call__(self, *args: Any, **kwds: Any) -> Any:
+        return self.function(*args, **kwds)
+
+
+class NodeClassMixinInstanceNodeFunction:
+    def __init__(
+        self,
+        instance: NodeClassMixin,
+        function: NodeClassMixinNodeFunction,
+    ) -> None:
+        self.instance = instance
+        self.function = function
+
+    def __call__(self, *args: Any, **kwds: Any) -> Any:
+        return self.function(self.instance, *args, **kwds)
+
+    @property
+    def name(self):
+        return self.function.name
+
+    def create_node(self):
+        """
+        Creates a new node for a NodeClassMixin method.
+
+        Args:
+          nodeclassmixininst (NodeClassMixin): The NodeClassMixin instance.
+          method (Callable): The method to be bound to the node class.
+          method_name (str): The name of the method.
+
+        Returns:
+          None
+
+        Side Effects:
+          Adds the node class to the _node_classes dictionary.
+        """
+
+        if not isinstance(self.function, NodeClassMixinNodeFunction):
+            raise ValueError("method is not a NodeClassMixinNodeFunction")
+
+        # first we define a unique id for the node
+        node_id = f"{self.instance.NODECLASSID}.{self.instance.uuid}.{self.name}"
+
+        # hecking if the method is actually in the class
+        if getattr(self.instance, self.name) is None:
+            raise ValueError("method not found in class")
+
+        # if (
+        #     getattr(nodeclassmixininst, method_name).__func__ != method
+        # ):  # __func__  is the unbound method
+        #     raise ValueError(
+        #         "class method is not the same as the method passed to the function:"
+        #         f"{getattr(nodeclassmixininst, method_name)}, {method}"
+        #     )
+
+        # then we create the node class
+        _node_create_params = {
+            "id": node_id,
+            #        "trigger_on_create": False,
+            **self.function._node_create_params,
+        }
+        _node_create_params["superclass"] = NodeClassNode
+        _node_create_params.setdefault(
+            "name", self.name.title()
+        )  # default name is the method name
+
+        # create a partial method that is bound to the nodeclassmixininst
+        partial_method = wraps(self.function.function)(
+            partial(self.function.function, self.instance)
+        )
+
+        # create the node class
+        nodeclass: Type[NodeClassNode] = NodeDecorator(**_node_create_params)(
+            partial_method
+        )
+
+        if not issubclass(nodeclass, NodeClassNode):
+            raise ValueError("node class is not a subclass of NodeClassNode")
+
+        # nodeclass should keep track of its instances:
+
+        # add instances to the class
+
+        self.instance._node_classes[self.name] = nodeclass
+        # if the method is called directly on the class, it should also trigger the corresponding nodes
+        instance_node_specials = self.function._instance_node_specials
+        trigger_on_call = instance_node_specials.get("trigger_on_call", None)
+        if trigger_on_call is None:
+            trigger_on_call = len(_get_nodeclass_inputs(nodeclass)) == 0
+
+        if trigger_on_call:
+
+            def _trigger_on_call_wrapper(*args, **kwargs):
+                """
+                A wrapper method that triggers the corresponding nodes when called.
+
+
+                Returns:
+                Any: The result of the original method.
+
+                Side Effects:
+                Triggers the corresponding nodes.
+                """
+                res = self(*args, **kwargs)
+
+                for node in nodeclass._instances.values():  # pylint: disable=protected-access
+                    node.request_trigger()
+                return res
+
+            setattr(self.instance, self.name, _trigger_on_call_wrapper)
+
+    def nodes(self, instance=None) -> List[Node]:
+        if instance is not None:
+            warn(
+                "instance argument for NodeClassMixinInstanceNodeFunction.nodes is deprecated",
+                DeprecationWarning,
+            )
+        return self.instance.get_nodes(self.name)
+
+    def nodeclass(self, instance=None) -> Type[NodeClassNode]:
+        if instance is not None:
+            warn(
+                "instance argument for NodeClassMixinInstanceNodeFunction.nodeclass is deprecated",
+                DeprecationWarning,
+            )
+
+        return self.instance.get_nodeclass(self.name)
+
+
 def instance_nodefunction(
     trigger_on_call: Optional[bool] = None, **kwargs: Unpack[NodeDecoratorKwargs]
 ):
@@ -227,20 +375,15 @@ def instance_nodefunction(
         """
         Inner decorator for instance_nodefunction.
         """
-        func._is_instance_nodefunction = True
-        func._node_create_params = kwargs
-        func._instance_node_specials = {"trigger_on_call": trigger_on_call}
 
-        func.triggers = trigger_decorator(func)
-        func.nodes = lambda self: self.get_nodes(func.__name__)
-        func.nodeclass = lambda self: self.get_nodeclass(func.__name__)
-
-        return func
+        return NodeClassMixinNodeFunction(
+            func, {"trigger_on_call": trigger_on_call}, **kwargs
+        )
 
     return decorator
 
 
-def trigger_decorator(target_func):
+def trigger_decorator(target_func: NodeClassMixinNodeFunction):
     """
     A decorator that triggers the corresponding nodes when the function is called.
 
@@ -270,7 +413,7 @@ def trigger_decorator(target_func):
         """
         Inner decorator for trigger_decorator.
         """
-        if not hasattr(target_func, "_is_instance_nodefunction"):
+        if not isinstance(target_func, NodeClassMixinNodeFunction):
             raise ValueError("trigger can only be used on instance_nodefunctions")
 
         @wraps(func)
@@ -279,50 +422,13 @@ def trigger_decorator(target_func):
             Wraps a function to handle callings
             """
             res = func(instance, *args, **kwargs)
-            for node in instance.get_nodes(target_func.__name__):
+            for node in target_func.nodes(ins=instance):
                 node.request_trigger()
             return res
 
         return func_wrapper
 
     return decorator
-
-
-def _make_get_node_method(
-    nodeclassmixininst: NodeClassMixin, method: Callable, name: str
-):
-    """
-    Creates a method for getting the node(s) for a NodeClassMixin method.
-
-    Args:
-      nodeclassmixininst (NodeClassMixin): The instance of the node class.
-      method (Callable): The method to be decorated.
-      name (str): The name of the method.
-    """
-
-    def _get_node() -> Any:
-        """
-        Gets the node.
-
-        Returns:
-          Any: The node.
-        """
-        nodeclassmixininst.create_nodes()
-        return getattr(getattr(nodeclassmixininst, name), "_node")
-
-    setattr(method, "get_node", _get_node)
-
-    def _get_nodes() -> Any:
-        """
-        Gets the nodes.
-
-        Returns:
-          Any: The nodes.
-        """
-        nodeclassmixininst.create_nodes()
-        return getattr(getattr(nodeclassmixininst, name), "_nodes")
-
-    setattr(method, "get_nodes", _get_nodes)
 
 
 class NodeClassNodeMeta(NodeMeta):
@@ -357,8 +463,6 @@ class NodeClassNode(Node, ABC, metaclass=NodeClassNodeMeta):
       _instances (WeakValueDictionary): A dictionary of all instances of the node class.
     """
 
-    _instances: WeakValueDictionary[str, NodeClassNode] = WeakValueDictionary()
-
     def __init__(self, *args, **kwargs):
         """
         Initializes a new instance of the NodeClassNode class.
@@ -366,119 +470,15 @@ class NodeClassNode(Node, ABC, metaclass=NodeClassNodeMeta):
         super().__init__(*args, **kwargs)
         self.__class__._instances[self.uuid] = self
 
+    def __init_subclass__(cls, **kwargs):
+        cls._instances: WeakValueDictionary[str, NodeClassNode] = WeakValueDictionary()
+        return super().__init_subclass__(**kwargs)
+
     def cleanup(self):
         if self.uuid in self.__class__._instances:
             # delete the instance from the class reference
             del self.__class__._instances[self.uuid]
         return super().cleanup()
-
-
-def _create_node(nodeclassmixininst: NodeClassMixin, method, method_name):
-    """
-    Creates a new node for a NodeClassMixin method.
-
-    Args:
-      nodeclassmixininst (NodeClassMixin): The NodeClassMixin instance.
-      method (Callable): The method to be bound to the node class.
-      method_name (str): The name of the method.
-
-    Returns:
-      None
-
-    Side Effects:
-      Adds the node class to the _node_classes dictionary.
-    """
-    # first we define a unique id for the node
-    node_id = (
-        f"{nodeclassmixininst.NODECLASSID}.{nodeclassmixininst.uuid}.{method_name}"
-    )
-
-    # hecking if the method is actually in the class
-    if getattr(nodeclassmixininst, method_name) is None:
-        raise ValueError("method not found in class")
-
-    if (
-        getattr(nodeclassmixininst, method_name).__func__ != method
-    ):  # __func__  is the unbound method
-        raise ValueError(
-            "class method is not the same as the method passed to the function:"
-            f"{getattr(nodeclassmixininst, method_name)}, {method}"
-        )
-
-    # then we create the node class
-    _node_create_params = {
-        "id": node_id,
-        #        "trigger_on_create": False,
-        **getattr(method, "_node_create_params", {}),
-    }
-    _node_create_params["superclass"] = NodeClassNode
-    _node_create_params.setdefault(
-        "name", method_name.title()
-    )  # default name is the method name
-
-    # create a partial method that is bound to the nodeclassmixininst
-    partial_method = wraps(method)(partial(method, nodeclassmixininst))
-
-    # create the node class
-    nodeclass: Type[NodeClassNode] = NodeDecorator(**_node_create_params)(
-        partial_method
-    )
-
-    if not issubclass(nodeclass, NodeClassNode):
-        raise ValueError("node class is not a subclass of NodeClassNode")
-
-    # nodeclass should keep track of its instances:
-
-    # add instances to the class
-
-    nodeclassmixininst._node_classes[method_name] = nodeclass
-    # if the method is called directly on the class, it should also trigger the corresponding nodes
-    instance_node_specials = getattr(method, "_instance_node_specials", {})
-    trigger_on_call = instance_node_specials.get("trigger_on_call", None)
-    if trigger_on_call is None:
-        trigger_on_call = len(_get_nodeclass_inputs(nodeclass)) == 0
-
-    if trigger_on_call:
-
-        @wraps(method)
-        def _trigger_on_call_wrapper(*args, **kwargs):
-            """
-            A wrapper method that triggers the corresponding nodes when called.
-
-
-            Returns:
-              Any: The result of the original method.
-
-            Side Effects:
-              Triggers the corresponding nodes.
-            """
-            res = method(nodeclassmixininst, *args, **kwargs)
-
-            for node in nodeclass._instances.values():  # pylint: disable=protected-access
-                node.request_trigger()
-            return res
-
-        setattr(nodeclassmixininst, method_name, _trigger_on_call_wrapper)
-
-
-def get_all_nodefunctions(
-    cls: Type[NodeClassMixin],
-) -> List[Tuple[Callable, str]]:
-    """
-    Gets all node functions for the given class.
-
-    Args:
-      cls (Type[NodeClassMixin]): The class to get the node functions for.
-
-    Returns:
-      List[Tuple[Callable, str]]: A list of tuples containing the node functions and their names.
-    """
-    nodefuncs = []
-    for parent in cls.__mro__:
-        for name, method in parent.__dict__.items():
-            if hasattr(method, "_is_instance_nodefunction"):
-                nodefuncs.append((method, name))
-    return nodefuncs
 
 
 class NodeClassMixin(ABC):
@@ -546,9 +546,41 @@ class NodeClassMixin(ABC):
         self._nodes_created = False
         self._name = None
 
-        for method, name in get_all_nodefunctions(self.__class__):
-            if hasattr(method, "_is_instance_nodefunction"):
-                _make_get_node_method(self, method, name)
+        self._instance_node_functions: Dict[
+            str, NodeClassMixinInstanceNodeFunction
+        ] = {}
+
+        self._make_instance_node_functions()
+
+    def _make_instance_node_functions(self):
+        for method, name in self.get_all_nodefunctions():
+            insfunc = NodeClassMixinInstanceNodeFunction(self, method)
+            self._instance_node_functions[name] = insfunc
+            setattr(
+                self,
+                name,
+                insfunc,
+            )
+
+    @classmethod
+    def get_all_nodefunctions(
+        cls: Type[NodeClassMixin],
+    ) -> List[Tuple[NodeClassMixinNodeFunction, str]]:
+        """
+        Gets all node functions for the given class.
+
+        Args:
+        cls (Type[NodeClassMixin]): The class to get the node functions for.
+
+        Returns:
+        List[Tuple[NodeClassMixinNodeFunction, str]]: A list of tuples containing the node functions and their names.
+        """
+        nodefuncs: List[Tuple[NodeClassMixinNodeFunction, str]] = []
+        for parent in cls.__mro__:
+            for name, method in parent.__dict__.items():
+                if isinstance(method, NodeClassMixinNodeFunction):
+                    nodefuncs.append((method, name))
+        return nodefuncs
 
     @property
     def uuid(self):
@@ -600,8 +632,8 @@ class NodeClassMixin(ABC):
         """
         if self._nodes_created:
             return
-        for method, name in get_all_nodefunctions(self.__class__):
-            _create_node(self, method, name)
+        for name, method in self._instance_node_functions.items():
+            method.create_node()
 
         self._nodes_created = True
 
@@ -667,6 +699,10 @@ class NodeClassMixin(ABC):
                 del self._node_classes[k]
             except Exception as e:
                 FUNCNODES_LOGGER.exception(e)
+
+        # in case parent class has a cleanup method
+        if hasattr(super(), "cleanup"):
+            super().cleanup()
 
     def __del__(self):
         self.cleanup()
