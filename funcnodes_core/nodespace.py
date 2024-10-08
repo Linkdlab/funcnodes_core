@@ -277,6 +277,9 @@ class NodeSpace(EventEmitterMixin):
           src (Node): The node that emitted the event.
           **data: Additional data passed with the event.
         """
+        if event == "cleanup":
+            self.remove_node_instance(src)
+            return
         msg = MessageInArgs(node=src.uuid, **data)
         self.emit(event, msg)
 
