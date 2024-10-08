@@ -23,13 +23,14 @@ def module_to_shelf(mod, name: Optional[str] = None) -> Shelf:
 
     if "shelf" in mod_data.entry_points:
         shelf = mod_data.entry_points["shelf"]
-        if (
-            isinstance(shelf, dict)
-            and "nodes" in shelf
-            and "subshelves" in shelf
-            and "name" in shelf
-        ):
+        try:
+            shelf = Shelf.from_dict(shelf)
             return shelf
+        except Exception as exc:
+            FUNCNODES_LOGGER.info(
+                f"Error while parsing shelf from entry_points in module {mod}"
+            )
+            FUNCNODES_LOGGER.exception(exc)
 
     shelf = Shelf(nodes=[], subshelves=[], name=name, description=mod.__doc__)
 
@@ -47,8 +48,5 @@ def module_to_shelf(mod, name: Optional[str] = None) -> Shelf:
                 )
 
             shelf.nodes.append(obj)
-    #            if obj.__name__ != name:
-    #                shelf["nodes"][name] = obj
-    #                if obj.__name__ not in mod_dict:
-    #                    mod_dict[obj.__name__] = obj
+
     return shelf
