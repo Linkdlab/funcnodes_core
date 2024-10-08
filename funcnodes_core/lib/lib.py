@@ -277,6 +277,25 @@ class Library(EventEmitterMixin):
                 return
         raise ValueError("Shelf does not exist")
 
+    @emit_after()
+    def remove_shelf_path(self, path: List[str]):
+        subshelfes = self._shelves
+        current_shelf = None
+        for _shelf in path:
+            for i, subshelf in enumerate(subshelfes):
+                if subshelf.name == _shelf:
+                    parent_shelf = current_shelf
+                    current_shelf = subshelf
+                    break
+            if current_shelf is None:
+                raise ValueError(f"shelf {_shelf} does not exist")
+            subshelfes = current_shelf.inner_subshelves
+
+        if parent_shelf is None:
+            self._shelves.remove(current_shelf)
+        else:
+            parent_shelf.inner_subshelves.remove(current_shelf)
+
     def _add_shelf_recursively(self, path: List[str]):
         subshelfes = self._shelves
         current_shelf = None
