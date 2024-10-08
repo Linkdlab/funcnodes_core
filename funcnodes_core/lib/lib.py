@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import List, Optional, TypedDict, Dict, Type, Tuple, Set
 from funcnodes_core.node import Node, SerializedNodeClass
 from funcnodes_core.utils.serialization import JSONEncoder, Encdata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from weakref import ReferenceType, ref
 from ..eventmanager import EventEmitterMixin, emit_after
 
@@ -17,10 +17,10 @@ class ShelfError(Exception):
 
 @dataclass
 class Shelf:
-    nodes: List[Type[Node]]
-    subshelves: List[Shelf]
     name: str
-    description: str
+    description: str = ""
+    nodes: List[Type[Node]] = field(default_factory=list)
+    subshelves: List[Shelf] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: Dict) -> Shelf:
