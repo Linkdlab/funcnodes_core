@@ -692,6 +692,7 @@ class NodeClassMixin(ABC):
 
     def cleanup(self):
         for node in self.get_all_nodes():
+            node.cleanup()
             del node  # node.__del__
 
         for k in list(self._node_classes):
