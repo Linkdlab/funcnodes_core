@@ -826,7 +826,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
     def disconnect(self, *args, **kwargs):
         super().disconnect(*args, **kwargs)
         if len(self._connected) == 0:
-            self.set_value(self.default)
+            self.set_value(self.default, does_trigger=False)
 
     @classmethod
     def from_serialized_input(cls, serialized_input: FunctionInputParam) -> NodeInput:

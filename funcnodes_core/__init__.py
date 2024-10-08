@@ -1,4 +1,4 @@
-__version__ = "0.1.20"
+__version__ = "0.1.21"
 
 from .io import (
     NodeInput,
@@ -22,6 +22,7 @@ from .lib import (
     find_shelf,
     NodeClassNotFoundError,
     flatten_shelf,
+    flatten_shelves,
 )
 from .nodemaker import NodeClassMixin, NodeDecorator, instance_nodefunction
 from ._logging import FUNCNODES_LOGGER, get_logger
@@ -38,7 +39,7 @@ from .utils.nodeutils import get_deep_connected_nodeset, run_until_complete
 from .utils.plugins_types import RenderOptions
 
 from .utils.functions import make_run_in_new_process, make_run_in_new_thread
-
+from .eventmanager import EventEmitterMixin, emit_after, emit_before
 from . import decorator
 
 from exposedfunctionality import add_type
@@ -82,6 +83,7 @@ __all__ = [
     "types",
     "NodeIOSerialization",
     "flatten_shelf",
+    "flatten_shelves",
     "IONotFoundError",
     "decorator",
     "setup",
@@ -89,4 +91,7 @@ __all__ = [
     "AVAILABLE_MODULES",
     "NodeTriggerError",
     "get_deep_connected_nodeset",
+    "EventEmitterMixin",
+    "emit_after",
+    "emit_before",
 ]
