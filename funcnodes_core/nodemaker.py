@@ -670,5 +670,9 @@ class NodeClassMixin(ABC):
             except Exception as e:
                 FUNCNODES_LOGGER.exception(e)
 
+        # in case parent class has a cleanup method
+        if hasattr(super(), "cleanup"):
+            super().cleanup()
+
     def __del__(self):
         self.cleanup()

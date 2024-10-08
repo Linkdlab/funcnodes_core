@@ -204,6 +204,10 @@ class EventEmitterMixin:
 
         # Additional cleanup tasks here
 
+        # in case parent class has a cleanup method
+        if hasattr(super(), "cleanup"):
+            super().cleanup()
+
     # Ensure to call cleanup before the object is deleted
     def __del__(self):
         """
