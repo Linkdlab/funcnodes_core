@@ -958,7 +958,10 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         if not self.does_trigger or self.value is NoValue or self.node is None:
             return triggerstack
 
-        return self.node.trigger(triggerstack=triggerstack)
+        if self.node.ready_to_trigger():
+            return self.node.trigger(triggerstack=triggerstack)
+        self.node.request_trigger()
+        return triggerstack
 
     def __del__(self):
         self.disconnect()
