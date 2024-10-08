@@ -39,7 +39,7 @@ from .utils.nodeutils import get_deep_connected_nodeset, run_until_complete
 from .utils.plugins_types import RenderOptions
 
 from .utils.functions import make_run_in_new_process, make_run_in_new_thread
-
+from .eventmanager import EventEmitterMixin, emit_after, emit_before
 from . import decorator
 
 from exposedfunctionality import add_type
@@ -91,4 +91,7 @@ __all__ = [
     "AVAILABLE_MODULES",
     "NodeTriggerError",
     "get_deep_connected_nodeset",
+    "EventEmitterMixin",
+    "emit_after",
+    "emit_before",
 ]
