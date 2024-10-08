@@ -248,6 +248,7 @@ class Library(EventEmitterMixin):
         self._dependencies: Dict[str, Set[str]] = {
             "modules": set(),
         }
+        super().__init__()
 
     @property
     def shelves(self) -> List[Shelf]:
@@ -292,7 +293,7 @@ class Library(EventEmitterMixin):
                         break
             if current_shelf is None:
                 raise ValueError("shelf must not be empty")
-            subshelfes = current_shelf.subshelves
+            subshelfes = current_shelf.inner_subshelves
         if current_shelf is None:
             raise ValueError("shelf must not be empty")
         return current_shelf
@@ -334,7 +335,7 @@ class Library(EventEmitterMixin):
             new_subshelfes = None
             for subshelf in subshelfes:
                 if subshelf.name == _shelf:
-                    new_subshelfes = subshelf.subshelves
+                    new_subshelfes = subshelf.inner_subshelves
                     current_shelf = subshelf
                     break
             if new_subshelfes is None:
