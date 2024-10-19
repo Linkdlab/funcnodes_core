@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "funcnodes-core"
-version = "0.1.24"
+version = "0.1.25"
 description = "core package for funcnodes"
 authors = ["Julian Kimmig <julian.kimmig@linkdlab.de>"]
 readme = "README.md"
@@ -26,6 +26,7 @@ coverage = "*"
 vulture = ">=2"
 pre-commit = "*"
 pytest = "*"
+funcnodes= "*"
 
 [build-system]
 requires = ["poetry-core"]

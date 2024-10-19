@@ -792,6 +792,8 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         self._connected: List[NodeOutput] = self._connected
         self._default = default
         self._class_default = class_default
+        self._forwards: weakref.WeakSet[NodeInput] = weakref.WeakSet()
+        self._forwards_from: weakref.WeakSet[NodeInput] = weakref.WeakSet()
 
     @property
     def value(self) -> Union[NodeIOType, NoValueType]:
@@ -823,8 +825,13 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
     def default(self, default: NodeIOType | NoValueType):
         self.set_default(default)
 
-    def disconnect(self, *args, **kwargs):
-        super().disconnect(*args, **kwargs)
+    def disconnect(self, other: Optional[NodeOutput] = None):
+        if other is None:
+            self._forwards_from.clear()
+        else:
+            self._forwards_from.discard(other)
+        super().disconnect(other=other)
+
         if len(self._connected) == 0:
             self.set_value(self.default, does_trigger=False)
 
@@ -916,6 +923,12 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
             if does_trigger:
                 self.node.request_trigger()
 
+        for other in self._forwards:
+            if other.has_forwards_from(self):
+                other.set_value(value, does_trigger=does_trigger)
+            else:
+                self._forwards.remove(other)
+
     def is_input(self):
         """Returns whether this NodeIO is an input.
 
@@ -967,6 +980,53 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         self.disconnect()
         self._node = None
         self._value = NoValue
+
+    def has_forwards_from(self, other: NodeInput):
+        return other in self._forwards_from
+
+    def has_forward_to(self, other: NodeInput):
+        return other in self._forwards
+
+    def forwards_from(self, other: NodeInput, replace=False):
+        if other in self._forwards_from:
+            return
+        if not other.is_input():
+            raise NodeConnectionError("Can only forward from other inputs")
+
+        if other in self._forwards:
+            raise NodeConnectionError(
+                "cannot get forwards from an input it selfs forwards to"
+            )
+
+        if self.is_connected() and not replace:
+            raise MultipleConnectionsError("Can only forward to unconnected inputs")
+
+        self._forwards_from.add(other)
+
+    def forward(self, other: NodeInput, replace=False):
+        if other in self._forwards:
+            return
+        if not other.is_input():
+            raise NodeConnectionError("Can only forward to other inputs")
+
+        if other.is_connected():
+            if not replace:
+                raise MultipleConnectionsError("Can only forward to unconnected inputs")
+            else:
+                other.disconnect()
+
+        self._forwards.add(other)
+        other.forwards_from(self, replace=replace)
+
+        other.set_value(self.value)
+
+    def get_forward_connections(self) -> List[NodeInput]:
+        return list(self._forwards)
+
+    def connect(self, other, replace=False):
+        if isinstance(other, NodeInput):
+            return self.forward(other)
+        return super().connect(other, replace)
 
 
 class NodeOutput(NodeIO):
