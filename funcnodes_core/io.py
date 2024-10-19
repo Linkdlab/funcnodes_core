@@ -825,14 +825,19 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
     def default(self, default: NodeIOType | NoValueType):
         self.set_default(default)
 
-    def disconnect(self, other: Optional[NodeOutput] = None):
+    def disconnect(self, other: Optional[Union[NodeInput, NodeOutput]] = None):
         if other is None:
-            self._forwards_from.clear()
+            for other in self._forwards_from:
+                other.unforward(self)
         else:
-            self._forwards_from.discard(other)
+            if other in self._forwards_from:
+                other.unforward(self)
+            if other in self._forwards:
+                self.unforward(other)
+
         super().disconnect(other=other)
 
-        if len(self._connected) == 0:
+        if len(self._connected) + len(self._forwards_from) == 0:
             self.set_value(self.default, does_trigger=False)
 
     @classmethod
@@ -989,7 +994,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
 
     def forwards_from(self, other: NodeInput, replace=False):
         if other in self._forwards_from:
-            return
+            return other.forward(self, replace=replace)
         if not other.is_input():
             raise NodeConnectionError("Can only forward from other inputs")
 
@@ -1003,9 +1008,18 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
 
         self._forwards_from.add(other)
 
+        return other.forward(self, replace=replace)
+
+    @emit_before()
+    @emit_after()
     def forward(self, other: NodeInput, replace=False):
         if other in self._forwards:
-            return
+            return [
+                self.node.uuid if self.node else None,
+                self.uuid,
+                other.node.uuid if other.node else None,
+                other.uuid,
+            ]
         if not other.is_input():
             raise NodeConnectionError("Can only forward to other inputs")
 
@@ -1020,13 +1034,44 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
 
         other.set_value(self.value)
 
+        return [
+            self.node.uuid if self.node else None,
+            self.uuid,
+            other.node.uuid if other.node else None,
+            other.uuid,
+        ]
+
+    def unforward_from(self, other: NodeInput):
+        if other in self._forwards_from:
+            self._forwards_from.remove(other)
+            other.unforward(self)
+
+        if len(self._connected) + len(self._forwards_from) == 0:
+            self.set_value(self.default, does_trigger=False)
+
+    @emit_before()
+    @emit_after()
+    def unforward(self, other: NodeInput):
+        if other in self._forwards:
+            self._forwards.remove(other)
+            other.unforward_from(self)
+            return [
+                self.node.uuid if self.node else None,
+                self.uuid,
+                other.node.uuid if other.node else None,
+                other.uuid,
+            ]
+
     def get_forward_connections(self) -> List[NodeInput]:
         return list(self._forwards)
 
     def connect(self, other, replace=False):
         if isinstance(other, NodeInput):
-            return self.forward(other)
-        return super().connect(other, replace)
+            return self.forward(other, replace=replace)
+        con = super().connect(other, replace)
+        if con and self._forwards_from:
+            for f in list(self._forwards_from):
+                self.unforward_from(f)
 
 
 class NodeOutput(NodeIO):
