@@ -93,6 +93,48 @@ class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
         self.nodespace.deserialize(serialized_nodespace)
         self.assertEqual(len(self.nodespace.nodes), 1)
 
+    def test_serialize_forward(self):
+        node1 = DummyNode()
+        node2 = DummyNode()
+        node1["output"].connect(node2["input"])
+        node2["input"].connect(node1["input"])
+        self.nodespace.add_node_instance(node1)
+        self.nodespace.add_node_instance(node2)
+        serialized_nodespace = self.nodespace.serialize()
+        print(serialized_nodespace)
+
+        self.assertEqual(len(serialized_nodespace["edges"]), 2)
+
+    def test_deserialize_forward(self):
+        node1 = DummyNode()
+        node2 = DummyNode()
+        node3 = DummyNode()
+        node1["output"].connect(node2["input"])
+        node2["input"].connect(node3["input"])
+        self.nodespace.add_node_instance(node1)
+        self.nodespace.add_node_instance(node2)
+        self.nodespace.add_node_instance(node3)
+        serialized_nodespace = self.nodespace.serialize()
+
+        self.nodespace.remove_node_instance(node1)
+        self.nodespace.remove_node_instance(node2)
+        self.nodespace.remove_node_instance(node3)
+
+        self.nodespace.deserialize(serialized_nodespace)
+
+        self.assertEqual(len(self.nodespace.nodes), 3)
+        self.assertEqual(len(self.nodespace.edges), 2)
+
+        node1 = self.nodespace.get_node_by_id(node1.uuid)
+        node2 = self.nodespace.get_node_by_id(node2.uuid)
+        node3 = self.nodespace.get_node_by_id(node3.uuid)
+
+        self.assertEqual(node1["output"].connections[0].node, node2)
+
+        node1["output"].set_value(123)
+
+        self.assertEqual(node3["input"].value, 123)
+
     def test_remove_node(self):
         gc.collect()
         # gc.set_debug(gc.DEBUG_LEAK)

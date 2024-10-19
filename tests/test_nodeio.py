@@ -94,8 +94,6 @@ class TestNodeIO(unittest.TestCase):
 
     def test_connection_exceptions(self):
         with self.assertRaises(NodeConnectionError):
-            self.input_1.connect(self.input_2)
-        with self.assertRaises(NodeConnectionError):
             self.output_1.connect(self.output_2)
 
     def test_multiple_connections_error(self):
@@ -132,6 +130,19 @@ class TestNodeIO(unittest.TestCase):
         self.assertEqual(len(self.output_1.connections), 0)
         self.assertEqual(len(self.input_1.connections), 0)
         self.assertEqual(len(self.input_2.connections), 0)
+
+    def test_input_forward(self):
+        self.input_1.connect(self.output_1)
+
+        self.output_1.set_value(123)
+
+        self.assertEqual(self.input_1.value, 123)
+        self.input_1.connect(self.input_2)
+        self.assertEqual(self.input_2.value, 123)
+
+        self.output_1.set_value(456)
+        self.assertEqual(self.input_1.value, 456)
+        self.assertEqual(self.input_2.value, 456)
 
     def test_set_value(self):
         test_value = 123

@@ -108,6 +108,10 @@ class NodeSpace(EventEmitterMixin):
                 for input in output.connections:
                     edges.append((output, input))
 
+            for inputstart in node.inputs.values():
+                for inputend in inputstart.get_forward_connections():
+                    edges.append((inputstart, inputend))
+
         return edges
 
     # endregion Properties
@@ -206,6 +210,10 @@ class NodeSpace(EventEmitterMixin):
             (output.node.uuid, output.uuid, input.node.uuid, input.uuid)
             for output, input in self.edges
             if output.node is not None and input.node is not None
+        ] + [
+            (output.node.uuid, output.uuid, input.node.uuid, input.uuid)
+            for output, input in self.edges
+            if output.node is not None and input.node is None
         ]
 
     def deserialize(self, data: NodeSpaceJSON):
