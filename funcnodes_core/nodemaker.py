@@ -103,7 +103,7 @@ def node_class_maker(
     kwargs.setdefault(
         "description", (in_func.ef_funcmeta.get("docstring") or {}).get("summary", "")
     )
-    cls_dict = {"func": _wrapped_func, **kwargs}
+    cls_dict = {"func": _wrapped_func, "o_func": func, **kwargs}
 
     for ip in inputs:
         cls_dict["input_" + ip._name] = ip
