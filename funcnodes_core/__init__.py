@@ -1,4 +1,4 @@
-__version__ = "0.1.27"
+__version__ = "0.2.0"
 
 from .io import (
     NodeInput,
@@ -36,13 +36,15 @@ from .utils import special_types as types
 from .utils.serialization import JSONDecoder, JSONEncoder, Encdata
 from .utils.nodeutils import get_deep_connected_nodeset, run_until_complete
 
+from .utils.wrapper import signaturewrapper
+
 from .utils.plugins_types import RenderOptions
 
 from .utils.functions import make_run_in_new_process, make_run_in_new_thread
 from .eventmanager import EventEmitterMixin, emit_after, emit_before
 from . import decorator
 
-from exposedfunctionality import add_type
+from exposedfunctionality import add_type, controlled_wrapper
 from ._setup import setup, AVAILABLE_MODULES
 
 __all__ = [
@@ -80,6 +82,7 @@ __all__ = [
     "NoValue",
     "DataEnum",
     "add_type",
+    "controlled_wrapper",
     "types",
     "NodeIOSerialization",
     "flatten_shelf",
@@ -94,4 +97,5 @@ __all__ = [
     "EventEmitterMixin",
     "emit_after",
     "emit_before",
+    "signaturewrapper",
 ]
