@@ -42,7 +42,7 @@ from .utils.functions import make_run_in_new_process, make_run_in_new_thread
 from .eventmanager import EventEmitterMixin, emit_after, emit_before
 from . import decorator
 
-from exposedfunctionality import add_type
+from exposedfunctionality import add_type, controlled_wrapper
 from ._setup import setup, AVAILABLE_MODULES
 
 __all__ = [
@@ -80,6 +80,7 @@ __all__ = [
     "NoValue",
     "DataEnum",
     "add_type",
+    "controlled_wrapper",
     "types",
     "NodeIOSerialization",
     "flatten_shelf",
