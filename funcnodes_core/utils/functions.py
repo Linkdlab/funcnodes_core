@@ -376,6 +376,7 @@ class DillProcessPoolExecutor(ProcessPoolExecutor):
         """
         Custom serialization using dill.
         """
+
         func_dill = dill.dumps(func)
         args_dill = dill.dumps((args, kwargs))
         return func_dill, args_dill
@@ -391,7 +392,8 @@ class DillProcessPoolExecutor(ProcessPoolExecutor):
         """
         func = dill.loads(func_dill)
         args, kwargs = dill.loads(args_dill)
-        return func(*args, **kwargs)
+        result = func(*args, **kwargs)
+        return dill.dumps(result)
 
 
 class ProcessExecutorWrapper(ExecutorWrapper[P, R]):
@@ -404,9 +406,10 @@ class ProcessExecutorWrapper(ExecutorWrapper[P, R]):
 
     executor_class = DillProcessPoolExecutor
 
-    def run_in_executor(self, *args: P.args, **kwargs: P.kwargs) -> Awaitable[R]:
-        future = self.executor.submit(call_sync, self.func, *args, **kwargs)
-        return asyncio.wrap_future(future)
+    async def run_in_executor(self, *args: P.args, **kwargs: P.kwargs) -> Awaitable[R]:
+        future = self.executor.submit(self.func, *args, **kwargs)
+        result = await asyncio.wrap_future(future)
+        return dill.loads(result)
 
 
 def make_run_in_new_thread(
