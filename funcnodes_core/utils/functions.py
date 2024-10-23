@@ -407,7 +407,8 @@ class ProcessExecutorWrapper(ExecutorWrapper[P, R]):
     executor_class = DillProcessPoolExecutor
 
     async def run_in_executor(self, *args: P.args, **kwargs: P.kwargs) -> Awaitable[R]:
-        future = self.executor.submit(self.func, *args, **kwargs)
+        future = self.executor.submit(call_sync, self.func, *args, **kwargs)
+
         result = await asyncio.wrap_future(future)
         return dill.loads(result)
 
