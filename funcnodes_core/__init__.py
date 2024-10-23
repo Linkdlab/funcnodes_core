@@ -36,6 +36,8 @@ from .utils import special_types as types
 from .utils.serialization import JSONDecoder, JSONEncoder, Encdata
 from .utils.nodeutils import get_deep_connected_nodeset, run_until_complete
 
+from .utils.wrapper import signaturewrapper
+
 from .utils.plugins_types import RenderOptions
 
 from .utils.functions import make_run_in_new_process, make_run_in_new_thread
@@ -95,4 +97,5 @@ __all__ = [
     "EventEmitterMixin",
     "emit_after",
     "emit_before",
+    "signaturewrapper",
 ]
