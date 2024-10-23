@@ -28,6 +28,27 @@ CONFIG = DEFAULT_CONFIG
 CONFIG_DIR = BASE_CONFIG_DIR
 
 
+def write_config(path, config):
+    """
+    Writes the configuration file.
+
+    Args:
+      path (str): The path to the configuration file.
+      config (dict): The configuration to write.
+
+    Returns:
+      None
+
+    Examples:
+      >>> write_config("config.json", {"env_dir": "env"})
+    """
+    with open(path, "w+") as f:
+        json.dump(config, f, indent=2)
+
+    with open(path + ".bu", "w+") as f:
+        json.dump(config, f, indent=2)
+
+
 def load_config(path):
     """
     Loads the configuration file.
@@ -42,14 +63,25 @@ def load_config(path):
       >>> load_config("config.json")
     """
     global CONFIG
-    if not os.path.exists(path):
-        config = DEFAULT_CONFIG
-    else:
+    config = None
+    try:
         with open(path, "r") as f:
             config = json.load(f)
+    except Exception:
+        pass
+
+    if config is None:
+        try:
+            with open(path + ".bu", "r") as f:
+                config = json.load(f)
+        except Exception:
+            pass
+
+    if config is None:
+        config = DEFAULT_CONFIG
+
     deep_fill_dict(config, DEFAULT_CONFIG)
-    with open(path, "w") as f:
-        json.dump(config, f, indent=2)
+    write_config(path, config)
     CONFIG = config
 
 
