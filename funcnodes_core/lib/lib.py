@@ -19,7 +19,7 @@ class ShelfError(Exception):
 class Shelf:
     name: str
     description: str = ""
-    nodes: Sequence[Type[Node]] = field(default_factory=list)
+    nodes: List[Type[Node]] = field(default_factory=list)
     subshelves: List[Shelf] = field(default_factory=list)
 
     @classmethod
@@ -347,7 +347,7 @@ class Library(EventEmitterMixin):
     @emit_after()
     def add_nodes(
         self,
-        nodes: List[Type[Node]],
+        nodes: Sequence[Type[Node]],
         shelf: str | List[str],
     ):
         if isinstance(shelf, str):
