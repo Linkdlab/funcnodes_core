@@ -1010,6 +1010,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
             raise MultipleConnectionsError("Can only forward to unconnected inputs")
 
         self._forwards_from.add(other)
+        self.set_default(self._class_default)
 
         return other.forward(self, replace=replace)
 
@@ -1075,6 +1076,8 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         if con and self._forwards_from:
             for f in list(self._forwards_from):
                 self.unforward_from(f)
+        self.set_default(self._class_default)
+        return con
 
 
 class NodeOutput(NodeIO):
