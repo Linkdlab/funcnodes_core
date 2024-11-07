@@ -3,7 +3,14 @@
 import unittest
 import sys
 from funcnodes_core.nodemaker import NodeDecorator
-from funcnodes_core.lib import module_to_shelf, serialize_shelfe, flatten_shelf, Shelf
+from funcnodes_core.lib import (
+    module_to_shelf,
+    serialize_shelfe,
+    flatten_shelf,
+    Shelf,
+    Library,
+    ShelfReferenceLost,
+)
 
 
 @NodeDecorator("test_lib_testfunc")
@@ -95,3 +102,37 @@ class TestLib(unittest.TestCase):
             ],
         )
         self.assertEqual([testfunc, testfunc], flatten_shelf(shelf)[0])
+
+    def test_lib_shelf_loseref(self):
+        lib = Library()
+        lib.add_shelf(NODE_SHELF)
+
+        with self.assertRaises(ShelfReferenceLost):
+            print(lib.shelves)
+
+    def test_lib_add_shelf(self):
+        lib = Library()
+        s = lib.add_shelf(NODE_SHELF)  # keep the shelf reference
+        self.assertEqual(len(lib.shelves), 1)
+        self.assertEqual(lib.shelves[0].name, NODE_SHELF["name"])
+        self.assertEqual(lib.shelves[0].nodes[0], testfunc)
+        self.assertEqual(lib.shelves[0].subshelves, [])
+        self.assertEqual(s, lib.shelves[0])
+
+    def test_lib_add_shelf_twice(self):
+        lib = Library()
+        s = lib.add_shelf(NODE_SHELF)  # keep the shelf reference
+        self.assertEqual(len(lib.shelves), 1)
+        self.assertEqual(lib.shelves[0].name, NODE_SHELF["name"])
+        self.assertEqual(lib.shelves[0].nodes[0], testfunc)
+        self.assertEqual(lib.shelves[0].subshelves, [])
+        self.assertEqual(s, lib.shelves[0])
+
+        s2 = lib.add_shelf(NODE_SHELF)  # keep the shelf reference
+        self.assertEqual(len(lib.shelves), 1)
+        self.assertEqual(lib.shelves[0].name, NODE_SHELF["name"])
+        self.assertEqual(lib.shelves[0].nodes[0], testfunc)
+        self.assertEqual(len(lib.shelves[0].nodes), 1)
+        self.assertEqual(lib.shelves[0].subshelves, [])
+        self.assertEqual(s, lib.shelves[0])
+        self.assertEqual(s2, s)
