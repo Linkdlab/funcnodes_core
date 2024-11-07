@@ -122,6 +122,9 @@ class NoValueType:
     def __str__(self):
         return "<NoValue>"
 
+    def __reduce__(self):
+        return (NoValueType, ())
+
 
 NoValue: NoValueType = NoValueType()
 
@@ -494,10 +497,14 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             return None
         return f"{self.node.uuid}__{self.uuid}"
 
+    def get_value(self) -> NodeIOType | NoValueType:
+        """Gets the current value of the NodeIO."""
+        return self._value
+
     @property
     def value(self) -> NodeIOType | NoValueType:
         """Gets the current value of the NodeIO."""
-        return self._value
+        return self.get_value()
 
     @value.setter
     def value(self, value: NodeIOType) -> None:
@@ -798,15 +805,9 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         self._forwards: weakref.WeakSet[NodeInput] = weakref.WeakSet()
         self._forwards_from: weakref.WeakSet[NodeInput] = weakref.WeakSet()
 
-    @property
-    def value(self) -> Union[NodeIOType, NoValueType]:
-        """Gets the current value of the NodeIO."""
-        return self._value if self._value is not NoValue else self._default
-
-    @value.setter
-    def value(self, value: NodeIOType) -> None:
-        """Sets the value of the NodeIO."""
-        self.set_value(value)
+    def get_value(self):
+        v = super().get_value()
+        return v if v is not NoValue else self._default
 
     def full_serialize(self, with_value=False) -> FullNodeInputJSON:
         return FullNodeInputJSON(
@@ -1010,7 +1011,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
             raise MultipleConnectionsError("Can only forward to unconnected inputs")
 
         self._forwards_from.add(other)
-        self.set_default(self._class_default)
+        self.set_default(NoValue)  # set default to class default upon connection
 
         return other.forward(self, replace=replace)
 
@@ -1072,11 +1073,12 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
     def connect(self, other, replace=False):
         if isinstance(other, NodeInput):
             return self.forward(other, replace=replace)
+        self.set_default(NoValue)  # set default to class default upon connection
         con = super().connect(other, replace)
         if con and self._forwards_from:
             for f in list(self._forwards_from):
                 self.unforward_from(f)
-        self.set_default(self._class_default)
+
         return con
 
 
