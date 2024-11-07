@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Optional, TypedDict, Dict, Type, Tuple, Set
+from typing import List, Optional, TypedDict, Dict, Type, Tuple, Set, Sequence
 from funcnodes_core.node import Node, SerializedNodeClass
 from funcnodes_core.utils.serialization import JSONEncoder, Encdata
 from dataclasses import dataclass, field
@@ -19,7 +19,7 @@ class ShelfError(Exception):
 class Shelf:
     name: str
     description: str = ""
-    nodes: List[Type[Node]] = field(default_factory=list)
+    nodes: Sequence[Type[Node]] = field(default_factory=list)
     subshelves: List[Shelf] = field(default_factory=list)
 
     @classmethod
@@ -180,7 +180,7 @@ def get_node_in_shelf(shelf: Shelf, nodeid: str) -> Tuple[int, Type[Node]]:
     raise NodeClassNotFoundError(f"Node with id {nodeid} not found")
 
 
-def update_nodes_in_shelf(shelf: Shelf, nodes: List[Type[Node]]):
+def update_nodes_in_shelf(shelf: Shelf, nodes: Sequence[Type[Node]]):
     """
     Adds nodes to a shelf
     """
@@ -403,7 +403,7 @@ class Library(EventEmitterMixin):
             i, _ = get_node_in_shelf(shelf, node.node_id)
             shelf.nodes.pop(i)
 
-    def remove_nodeclasses(self, nodes: List[Type[Node]]):
+    def remove_nodeclasses(self, nodes: Sequence[Type[Node]]):
         for node in nodes:
             self.remove_nodeclass(node)
 
