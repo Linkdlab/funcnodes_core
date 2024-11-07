@@ -203,6 +203,15 @@ class TestNodeIO(unittest.TestCase):
 
         node.trigger.assert_called_once_with(triggerstack=ts)
 
+    def test_reset_default_on_connect(self):
+        self.input_1.default = 123
+        self.assertEqual(self.input_1.value, 123)
+        self.input_1.connect(self.output_1)
+        self.assertEqual(self.input_1.value, NoValue)
+        self.assertEqual(self.input_1.default, NoValue)
+        self.output_1.value = 456
+        self.assertEqual(self.input_1.value, 456)
+
 
 class RaiseAllowConnectionsTest(unittest.TestCase):
     def setUp(self):
@@ -237,3 +246,46 @@ class RaiseAllowConnectionsTest(unittest.TestCase):
         # but outputs do
         raise_allow_connections(self.ip2, self.op1)
         raise_allow_connections(self.op1, self.ip2)
+
+
+def return_no_value():
+    return NoValue
+
+
+class TestNoValue(unittest.TestCase):
+    def test_no_singleton(self):
+        n1 = NoValue
+        n2 = NoValue
+        self.assertIs(n1, n2)
+
+        self.assertIs(NoValue, NoValue.__class__())
+        self.assertIs(NoValue, return_no_value())
+
+    def test_singeton_threadsafe(self):
+        import threading
+
+        res = []
+
+        def set_no_value():
+            res.append(return_no_value())
+
+        nv_thread = threading.Thread(target=set_no_value)
+        nv_thread.start()
+        nv_thread.join()
+
+        self.assertIs(res[0], NoValue)
+
+    def test_singleton_multiprocess(self):
+        import multiprocessing
+
+        pool = multiprocessing.Pool(1)
+
+        res = pool.apply(return_no_value)
+        self.assertIs(res, NoValue)
+
+    def test_singleton_picklesave(self):
+        import pickle
+
+        pickled = pickle.dumps(NoValue)
+        unpickled = pickle.loads(pickled)
+        self.assertIs(NoValue, unpickled)

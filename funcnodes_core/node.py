@@ -148,6 +148,7 @@ def _parse_nodeclass_io(node: Node):
         node.add_input(
             NodeInput(
                 **ser,
+                class_default=ip.default,
             )
         )
 
@@ -802,6 +803,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             kwargs = {
                 ip.uuid: ip.value for ip in self._inputs if ip.value is not NoValue
             }
+
             err = None
             if "_triggerinput" in kwargs:
                 del kwargs["_triggerinput"]
