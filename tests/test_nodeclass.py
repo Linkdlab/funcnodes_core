@@ -214,10 +214,10 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(test_node2.outputs["out"].value, 1)
         self.assertGreaterEqual(end - start, 2)
 
-    async def test_call_seperate_thread(self):
+    async def test_call_separate_thread(self):
         import time
 
-        @fn.NodeDecorator(node_id="non_blocking_node", seperate_thread=True)
+        @fn.NodeDecorator(node_id="non_blocking_node", separate_thread=True)
         def NoneBlockingNode(input: int) -> int:
             print("Start")
             time.sleep(1)
@@ -242,10 +242,59 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(end - start, 2)
         self.assertGreaterEqual(end - start, 1)
 
-    async def test_call_seperate_thread_output_trigger(self):
+    async def test_call_separate_thread_output_trigger(self):
         import time
 
-        @fn.NodeDecorator(node_id="non_blocking_node_t", seperate_thread=True)
+        @fn.NodeDecorator(node_id="non_blocking_node_t", separate_thread=True)
+        def NoneBlockingNode(input: int) -> int:
+            print("Start")
+            time.sleep(1)
+            print("End")
+            return input
+
+        bn = NoneBlockingNode()
+        dum = DummyNode()
+
+        bn.outputs["out"].connect(dum.inputs["input"])
+        bn.inputs["input"].value = 1
+        await fn.run_until_complete(bn, dum)
+
+        self.assertEqual(bn.outputs["out"].value, 1)
+        self.assertEqual(dum.inputs["input"].value, 1)
+        self.assertEqual(dum.outputs["output"].value, 1)
+
+    async def test_call_separate_process(self):
+        import time
+
+        @fn.NodeDecorator(node_id="non_blocking_node", separate_process=True)
+        def NoneBlockingNode(input: int) -> int:
+            print("Start")
+            time.sleep(2)
+            print("End")
+            return input
+
+        test_node1 = NoneBlockingNode()
+        test_node2 = NoneBlockingNode()
+
+        enternode = DummyNode()
+
+        enternode.outputs["output"].connect(test_node1.inputs["input"])
+        enternode.outputs["output"].connect(test_node2.inputs["input"])
+        start = time.time()
+        fn.FUNCNODES_LOGGER.info("Start wait")
+        await fn.run_until_complete(enternode, test_node1, test_node2)
+        fn.FUNCNODES_LOGGER.info("End wait")
+        end = time.time()
+        self.assertEqual(enternode.outputs["output"].value, 1)
+        self.assertEqual(test_node1.outputs["out"].value, 1)
+        self.assertEqual(test_node2.outputs["out"].value, 1)
+        self.assertLessEqual(end - start, 4)
+        self.assertGreaterEqual(end - start, 2)
+
+    async def test_call_separate_process_output_trigger(self):
+        import time
+
+        @fn.NodeDecorator(node_id="non_blocking_node_t", separate_thread=True)
         def NoneBlockingNode(input: int) -> int:
             print("Start")
             time.sleep(1)
@@ -255,6 +304,7 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
         bn = NoneBlockingNode()
         dum = DummyNode()
         bn.inputs["input"].value = 1
+        self.assertEqual(bn.inputs["input"].value, 1)
         bn.outputs["out"].connect(dum.inputs["input"])
         await fn.run_until_complete(bn, dum)
 

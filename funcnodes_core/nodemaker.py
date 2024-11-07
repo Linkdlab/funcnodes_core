@@ -23,7 +23,7 @@ from .utils.functions import (
 )
 
 from weakref import WeakValueDictionary
-
+import warnings
 
 try:
     from typing import Unpack
@@ -37,7 +37,7 @@ def node_class_maker(
     id: Optional[str] = None,
     func: Callable[..., ReturnType] = None,
     superclass: Type[Node] = Node,
-    seperate_thread: bool = False,
+    separate_thread: bool = False,
     separate_process: bool = False,
     **kwargs: Unpack[NodeClassDict],
 ) -> Type[Node]:
@@ -67,8 +67,8 @@ def node_class_maker(
             kwargs["node_id"] = id
     in_func = assure_exposed_method(func)
 
-    if separate_process and seperate_thread:
-        raise ValueError("seperate_thread and separate_process cannot both be True")
+    if separate_process and separate_thread:
+        raise ValueError("separate_thread and separate_process cannot both be True")
 
     inputs = [
         NodeInput.from_serialized_input(ip)
@@ -81,7 +81,7 @@ def node_class_maker(
 
     if separate_process:
         asyncfunc = make_run_in_new_process(in_func)
-    elif seperate_thread:
+    elif separate_thread:
         asyncfunc = make_run_in_new_thread(in_func)
     else:
         asyncfunc = make_async_if_needed(in_func)
@@ -91,6 +91,13 @@ def node_class_maker(
         """
         A wrapper for the exposed function that sets the output values of the node.
         """
+        print(
+            "BBBtriggering",
+            self,
+            {ip.name: ip.value for ip in self.inputs.values()},
+            args,
+            kwargs,
+        )
         outs = await asyncfunc(*args, **kwargs)
         if len(outputs) > 1:
             for op, out in zip(outputs, outs):
@@ -143,7 +150,7 @@ class NodeDecoratorKwargs(ExposedMethodKwargs, NodeClassDict, total=False):
     """
 
     superclass: Optional[Type[Node]]
-    seperate_thread: Optional[bool]
+    separate_thread: Optional[bool]
     separate_process: Optional[bool]
 
 
@@ -184,12 +191,20 @@ def NodeDecorator(
 
         func = assure_exposed_method(func, **exposed_method_kwargs)
 
+        if "seperate_thread" in kwargs:
+            warnings.warn(
+                "The 'seperate_thread' argument is deprecated (typo), use 'separate_thread' instead.",
+                DeprecationWarning,
+            )
         # Create the node class
         return node_class_maker(
             id,
             func,
             superclass=kwargs.get("superclass", Node),
-            seperate_thread=kwargs.get("seperate_thread", False),
+            separate_thread=kwargs.get(
+                "separate_thread",
+                kwargs.get("seperate_thread", False),
+            ),  # fallback for typo in old versions
             separate_process=kwargs.get("separate_process", False),
             **node_class_kwargs,
         )

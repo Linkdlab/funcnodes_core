@@ -313,7 +313,7 @@ class TestExecutorWrapper(unittest.IsolatedAsyncioTestCase):
         """Test an asynchronous function decorated with make_run_in_new_process."""
         node = fn.NodeDecorator(
             node_id="test_async_as_node_thread",
-            seperate_thread=True,
+            separate_thread=True,
         )(async_function)()
 
         node["x"] = 5
@@ -334,7 +334,7 @@ class TestExecutorWrapper(unittest.IsolatedAsyncioTestCase):
         """Test an asynchronous function decorated with make_run_in_new_process."""
         node = fn.NodeDecorator(
             node_id="test_sync_as_node_thread",
-            seperate_thread=True,
+            separate_thread=True,
         )(sync_function)()
 
         node["x"] = 5
@@ -400,7 +400,7 @@ class TestExecutorWrapper(unittest.IsolatedAsyncioTestCase):
         """Test an asynchronous function decorated with make_run_in_new_process."""
         node = fn.NodeDecorator(
             node_id="test_async_as_node_thread_dec",
-            seperate_thread=True,
+            separate_thread=True,
         )(make_run_in_new_thread(async_function))()
 
         node["x"] = 5
@@ -421,7 +421,7 @@ class TestExecutorWrapper(unittest.IsolatedAsyncioTestCase):
         """Test an asynchronous function decorated with make_run_in_new_process."""
         node = fn.NodeDecorator(
             node_id="test_sync_as_node_thread_dec",
-            seperate_thread=True,
+            separate_thread=True,
         )(make_run_in_new_thread(sync_function))()
 
         print(node.serialize())
