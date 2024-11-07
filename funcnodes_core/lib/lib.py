@@ -70,6 +70,10 @@ class Shelf:
         self.subshelves.append(shelf)
 
 
+class ShelfReferenceLost(ReferenceError):
+    pass
+
+
 @dataclass
 class _InnerShelf:
     nodes_ref: List[ReferenceType[Type[Node]]]
@@ -107,7 +111,11 @@ class _InnerShelf:
     def _check_shelf(self):
         if self.shelf is not None:
             if self.shelf() is None:
-                raise ValueError("Shelf reference is lost")
+                raise ShelfReferenceLost(
+                    "Shelf reference is lost\n"
+                    "This could happen if the shelf is not permanently stored e.g. if its added to the library "
+                    "as a dictionary and the returned Shelf object is not referenced"
+                )
 
     def to_shelf(self) -> Shelf:
         self._check_shelf()
@@ -122,18 +130,23 @@ class _InnerShelf:
         )
 
     def add_node(self, node: Type[Node]):
-        self._check_shelf()
-        if self.shelf is None:
-            self.nodes_ref.append(ref(node))
-        else:
-            self.shelf().add_node(node)
+        self.nodes_ref.append(ref(node))
 
     def add_subshelf(self, shelf: Shelf):
         self._check_shelf()
-        if self.shelf is None:
-            self.inner_subshelves.append(shelf)
-        else:
-            self.shelf().add_subshelf(shelf)
+        self.inner_subshelves.append(_InnerShelf.from_shelf(shelf))
+
+    def update(self, shelf: Shelf):
+        for node in shelf.nodes:
+            if node not in self.nodes:
+                self.add_node(node)
+
+        subshelves = {subshelf.name: subshelf for subshelf in self.inner_subshelves}
+        for subshelf in shelf.subshelves:
+            if subshelf.name in subshelves:
+                subshelves[subshelf.name].update(subshelf)
+            else:
+                self.add_subshelf(subshelf)
 
 
 class SerializedShelf(TypedDict):
@@ -264,10 +277,12 @@ class Library(EventEmitterMixin):
     def add_shelf(self, shelf: Shelf):
         shelf = check_shelf(shelf)
         shelf_dict = {s.name: s for s in self._shelves}
-        if shelf.name in shelf_dict and shelf_dict[shelf.name].to_shelf() != shelf:
-            raise ValueError(f"Shelf with name {shelf['name']} already exists")
-        self._shelves.append(_InnerShelf.from_shelf(shelf))
-        return shelf
+        if shelf.name in shelf_dict:
+            shelf_dict[shelf.name].update(shelf)
+            return shelf_dict[shelf.name].to_shelf()
+        else:
+            self._shelves.append(_InnerShelf.from_shelf(shelf))
+            return shelf
 
     @emit_after()
     def remove_shelf(self, shelf: Shelf):

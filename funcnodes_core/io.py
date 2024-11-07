@@ -570,6 +570,9 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
     def __gt__(self, other):
         self.connect(other)
 
+    def __lt__(self, value):
+        return self.set_value(value)
+
     @emit_before()
     @emit_after()
     def disconnect(self, other: Optional[NodeIO] = None):
