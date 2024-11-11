@@ -345,6 +345,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         self._inputs: List[NodeInput] = []
         self._outputs: List[NodeOutput] = []
         self._triggerstack: Optional[TriggerStack] = None
+        self._trigger_open = False
         self._requests_trigger = False
         self.asynceventmanager = AsyncEventManager(self)
         if uuid is None and id is not None:
@@ -797,6 +798,8 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             """Wraps the node's function to handle the triggering of events before and after its execution."""
             # set the trigger event
             await self.asynceventmanager.set_and_clear("triggered")
+            await asyncio.sleep(self._pretrigger_delay)
+            self._trigger_open = False
             self.emit("triggerstart")
             # run the function
 
@@ -852,6 +855,8 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         # if the node is ready to trigger, trigger it
         if self.ready_to_trigger():
             self.trigger()
+        elif self._trigger_open:
+            return
         else:
             # otherwise set the _requests_trigger attribute to True
             self._requests_trigger = True
@@ -914,6 +919,8 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             raise InTriggerError("Node is already in trigger")
         if triggerstack is None:
             triggerstack = TriggerStack()
+        self._pretrigger_delay = 0.02  # 20ms
+        self._trigger_open = True
         triggerlogger.debug(f"triggering {self}")
         self._triggerstack = triggerstack
         self._triggerstack.append(self())
