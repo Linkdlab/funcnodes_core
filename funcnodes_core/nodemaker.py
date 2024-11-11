@@ -91,13 +91,6 @@ def node_class_maker(
         """
         A wrapper for the exposed function that sets the output values of the node.
         """
-        print(
-            "BBBtriggering",
-            self,
-            {ip.name: ip.value for ip in self.inputs.values()},
-            args,
-            kwargs,
-        )
         outs = await asyncfunc(*args, **kwargs)
         if len(outputs) > 1:
             for op, out in zip(outputs, outs):
