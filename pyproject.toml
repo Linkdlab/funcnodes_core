@@ -1,10 +1,10 @@
 [tool.poetry]
 name = "funcnodes-core"
-version = "0.2.4"
+version = "0.3"
 description = "core package for funcnodes"
 authors = ["Julian Kimmig <julian.kimmig@linkdlab.de>"]
 readme = "README.md"
-license = "MIT"
+license = "AGPLv3"
 
 [tool.poetry.urls]
 homepage  = "https://github.com/Linkdlab/funcnodes_core"
