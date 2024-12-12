@@ -4,6 +4,9 @@ from .utils.data import deep_fill_dict
 from .utils.plugins_types import RenderOptions
 from dotenv import load_dotenv
 from exposedfunctionality.function_parser.types import type_to_string
+import tempfile
+import shutil
+import sys
 
 load_dotenv(override=True)
 
@@ -102,6 +105,8 @@ def check_config_dir():
     if "custom_config_dir" in CONFIG:
         load_config(os.path.join(CONFIG["custom_config_dir"], "config.json"))
         CONFIG_DIR = CONFIG["custom_config_dir"]
+    else:
+        CONFIG_DIR = BASE_CONFIG_DIR
 
 
 check_config_dir()
@@ -159,4 +164,53 @@ def update_render_options(options: RenderOptions):
     )
 
 
-IN_NODE_TEST = bool(os.environ.get("IN_NODE_TEST", False))
+IN_NODE_TEST = False
+
+
+class This(sys.__class__):  # sys.__class__ is <class 'module'>
+    _IN_NODE_TEST = IN_NODE_TEST
+
+    @property
+    def IN_NODE_TEST(self):  # do the property things in this class
+        return self._IN_NODE_TEST
+
+    @IN_NODE_TEST.setter
+    def IN_NODE_TEST(self, value):  # setter is also OK
+        value = bool(value)
+        if value:
+            set_in_test()
+        self._IN_NODE_TEST = value
+
+
+del IN_NODE_TEST
+
+sys.modules[__name__].__class__ = This  # set the __class__ of the module to This
+
+
+def set_in_test(clear=True):
+    """
+    Sets the configuration to be in test mode.
+
+    Returns:
+      None
+
+    Examples:
+      >>> set_in_test()
+    """
+    global BASE_CONFIG_DIR
+    sys.modules[__name__]._IN_NODE_TEST = True
+    BASE_CONFIG_DIR = os.path.join(tempfile.gettempdir(), "funcnodes_test")
+    if clear:
+        if os.path.exists(BASE_CONFIG_DIR):
+            try:
+                shutil.rmtree(BASE_CONFIG_DIR)
+            except Exception:
+                pass
+    check_config_dir()
+
+    from ._logging import set_logging_dir
+
+    set_logging_dir(os.path.join(BASE_CONFIG_DIR, "logs"))
+
+
+sys.modules[__name__].IN_NODE_TEST = bool(os.environ.get("IN_NODE_TEST", False))
