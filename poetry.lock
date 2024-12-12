@@ -522,18 +522,18 @@ files = [
 
 [[package]]
 name = "funcnodes"
-version = "0.4.47"
+version = "0.5.6"
 description = "funcnodes"
 optional = false
 python-versions = ">=3.11"
 files = [
-    {file = "funcnodes-0.4.47-py3-none-any.whl", hash = "sha256:bd13155f153fbc815763f9eee32bdb993f4a0d39502e2b5f9a01be9024e7b566"},
-    {file = "funcnodes-0.4.47.tar.gz", hash = "sha256:c83011a680e4d0da8cc22158e502daea515323c7a4332063e9ec4502970ae81f"},
+    {file = "funcnodes-0.5.6-py3-none-any.whl", hash = "sha256:2ec5d58ca4a11229e9731021ac21e42b4b53f0ad38ddcc8564ae53859d6db775"},
+    {file = "funcnodes-0.5.6.tar.gz", hash = "sha256:21129791150a2998c0b35b5bcad16104d09103950a0b97b56c2e0083e8a45b16"},
 ]
 
 [package.dependencies]
 funcnodes-basic = ">=0.1.6"
-funcnodes-core = ">=0.2.2"
+funcnodes-core = ">=0.3.2"
 funcnodes-react-flow = ">=0.2.2"
 requests = "*"
 setproctitle = ">=1"
