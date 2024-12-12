@@ -208,7 +208,9 @@ def set_in_test(clear=True):
                 pass
     check_config_dir()
 
-    from ._logging import set_logging_dir
+    # import here to avoid circular import
+
+    from ._logging import set_logging_dir  # noqa C0415 # pylint: disable=import-outside-toplevel
 
     set_logging_dir(os.path.join(BASE_CONFIG_DIR, "logs"))
 
