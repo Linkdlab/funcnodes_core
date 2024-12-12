@@ -92,7 +92,7 @@ def getChildren(logger: logging.Logger):
     return children
 
 
-def _update_logger_handlers(logger: logging.Logger):
+def _update_logger_handlers(logger: logging.Logger, prev_dir=None):
     """
     Updates the handlers for the given logger, ensuring it has a StreamHandler and a RotatingFileHandler.
     The log files are stored in the logs directory, and the log formatting is set correctly.
@@ -107,7 +107,8 @@ def _update_logger_handlers(logger: logging.Logger):
     Example:
       >>> _update_logger_handlers(FUNCNODES_LOGGER)
     """
-
+    if prev_dir is None:
+        prev_dir = LOGGINGDIR
     has_stream_handler = False
     for hdlr in list(logger.handlers):
         if isinstance(hdlr, logging.StreamHandler):
@@ -115,12 +116,12 @@ def _update_logger_handlers(logger: logging.Logger):
             hdlr.setFormatter(_formatter)
 
         if isinstance(hdlr, RotatingFileHandler):
-            if hdlr.baseFilename == os.path.join(LOGGINGDIR, f"{logger.name}.log"):
+            if hdlr.baseFilename == os.path.join(prev_dir, f"{logger.name}.log"):
                 hdlr.close()
                 logger.removeHandler(hdlr)
                 continue
 
-        if isinstance(hdlr, logging.Handler):
+        elif isinstance(hdlr, logging.Handler):
             hdlr.setFormatter(_formatter)
 
     if not has_stream_handler:
@@ -138,7 +139,7 @@ def _update_logger_handlers(logger: logging.Logger):
 
     # get child loggers
     for child in getChildren(logger):
-        _update_logger_handlers(child)
+        _update_logger_handlers(child, prev_dir=prev_dir)
 
 
 def get_logger(name, propagate=True):
@@ -179,10 +180,11 @@ def set_logging_dir(path):
       >>> set_logging_dir("/path/to/custom/logs")
     """
     global LOGGINGDIR
+    prev_dir = LOGGINGDIR
     LOGGINGDIR = path
     if not os.path.exists(path):
         os.makedirs(path)
-    _update_logger_handlers(FUNCNODES_LOGGER)
+    _update_logger_handlers(FUNCNODES_LOGGER, prev_dir=prev_dir)
 
 
 def set_format(fmt: str):
