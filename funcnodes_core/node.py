@@ -47,7 +47,7 @@ from .utils.data import (
     deep_fill_dict,
 )
 from .utils.nodeutils import run_until_complete
-from .utils.nodetqdm import NodeTqdm
+from .utils.nodetqdm import NodeTqdm, TqdmState
 from funcnodes_core._logging import get_logger, FUNCNODES_LOGGER
 
 triggerlogger = get_logger("trigger")
@@ -379,7 +379,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
 
         self.progress = NodeTqdm(broadcast_func=self._broadcast_progress)
 
-    def _broadcast_progress(self, info):
+    def _broadcast_progress(self, info: TqdmState):
         msg = MessageInArgs(src=self, info=info)
         self.emit("progress", msg)
 
@@ -947,6 +947,9 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         self._inputs.clear()
         for op in list(self._outputs):
             self.remove_output(op)
+        if hasattr(self, "progress"):
+            self.progress.close()
+            del self.progress
         super().cleanup()
 
     def __del__(self):

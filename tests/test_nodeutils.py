@@ -62,6 +62,9 @@ class TestNodeUtils(unittest.IsolatedAsyncioTestCase):
             )
 
         self.node1.on("progress", progress_callback)
+
+        self.assertIsNotNone(self.node1.progress.broadcast_func)
+
         await self.node1
 
         self.assertEqual(
