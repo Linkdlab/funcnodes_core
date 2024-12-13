@@ -818,14 +818,14 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             if "_triggerinput" in kwargs:
                 del kwargs["_triggerinput"]
             try:
-                self.progress.reset(total=None, n=0, desc="triggering")
+                self.progress(total=None, desc="triggering")
                 # run the function
                 ans = await self.func(**kwargs)
                 # reset the inputs if requested
                 if self.reset_inputs_on_trigger:
                     for ip in self._inputs:
                         ip.set_value(ip.default, does_trigger=False)
-                self.progress.reset(desc="idle")
+                self.progress(total=None, desc="idle")
             except Exception as e:
                 err = e
 
