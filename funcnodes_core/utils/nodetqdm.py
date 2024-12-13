@@ -76,7 +76,6 @@ class NodeTqdm(tqdm):
         broadcast_func: Optional[Callable[[TqdmState], None]] = None,
         **kwargs,
     ):
-        print("broadcast_func", broadcast_func)
         self.broadcast_func = broadcast_func
         super().__init__(*args, **kwargs)
 
