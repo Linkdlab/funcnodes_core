@@ -6,6 +6,9 @@ from funcnodes_core.utils.nodeutils import (
 )
 
 from funcnodes_core.nodemaker import NodeDecorator
+from funcnodes_core import config
+
+config.IN_NODE_TEST = True
 
 
 @NodeDecorator("dummy_nodefor testnodeutils")
@@ -48,3 +51,31 @@ class TestNodeUtils(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.node1.outputs["out"].value, 10)
         self.assertEqual(self.node2.outputs["out"].value, 10)
         self.assertEqual(self.node3.outputs["out"].value, 10)
+
+    async def test_node_progress(self):
+        # Test that the progress is updated as expected.
+        collected = []
+
+        def progress_callback(src, info):
+            collected.append(
+                info,
+            )
+
+        self.node1.on("progress", progress_callback)
+        await self.node1
+
+        self.assertEqual(
+            len(collected),
+            2,
+            "There should be two progress updates. One for triggering and one for idle.",
+        )
+        self.assertEqual(
+            collected[0]["prefix"],
+            "triggering",
+            "The prefix should be 'triggering'.",
+        )
+        self.assertEqual(
+            collected[1]["prefix"],
+            "idle",
+            "The prefix should be 'idle'.",
+        )
