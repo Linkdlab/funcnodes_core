@@ -74,18 +74,21 @@ class NodeTqdm(tqdm):
         self,
         *args,
         broadcast_func: Optional[Callable[[TqdmState], None]] = None,
+        leave: bool = False,
         **kwargs,
     ):
         self.broadcast_func = broadcast_func
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, leave=leave, **kwargs)
 
-    def reset(self, total=None, desc=None, n=None):
+    def reset(self, total=None, desc=None, iterable=None, initial=0):
+        self.disable = False
         if desc is not None:
             self.desc = desc
-
+        self.iterable = iterable
+        self.total = total
         super().reset(total=total)
-        if n is not None:
-            self.n = n
+
+        self.n = initial
 
     def display(self, msg=None, pos=None):
         # This method is called by tqdm according to its internal logic,
@@ -100,3 +103,34 @@ class NodeTqdm(tqdm):
         result = self.broadcast_func(self.format_dict)
         if asyncio.iscoroutine(result):
             asyncio.create_task(result)
+
+    def set_total(self, total):
+        if total == float("inf"):
+            # Infinite iterations, behave same as unknown
+            total = None
+
+        total = int(total)
+
+        self.total = total
+
+    def __call__(self, iterable=None, total=None, desc=None, initial=0):
+        if total is None:
+            try:
+                total = len(iterable)
+            except (TypeError, AttributeError):
+                total = None
+
+        self.reset(total=total, desc=desc, iterable=iterable, initial=initial)
+        return self
+
+    def __enter__(self):
+        return super().__enter__()
+
+    def __exit__(
+        self,
+        exc_type,  # noqa: F841
+        exc_value,  # noqa: F841
+        traceback,  # noqa: F841
+    ):
+        # somehow the output is generated double times here (but it still works)
+        self.reset()
