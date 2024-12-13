@@ -73,7 +73,13 @@ def node_class_maker(
     inputs = [
         NodeInput.from_serialized_input(ip)
         for ip in in_func.ef_funcmeta["input_params"]
+        if ip["name"] != "node"
     ]
+
+    requires_node_input = any(
+        ip["name"] == "node" for ip in in_func.ef_funcmeta["input_params"]
+    )
+
     outputs = [
         NodeOutput.from_serialized_output(op)
         for op in in_func.ef_funcmeta["output_params"]
@@ -91,6 +97,10 @@ def node_class_maker(
         """
         A wrapper for the exposed function that sets the output values of the node.
         """
+
+        if requires_node_input:
+            kwargs["node"] = self
+
         outs = await asyncfunc(*args, **kwargs)
         if len(outputs) > 1:
             for op, out in zip(outputs, outs):
