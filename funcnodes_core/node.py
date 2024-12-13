@@ -36,6 +36,7 @@ from .io import (
 from .triggerstack import TriggerStack
 from .eventmanager import (
     AsyncEventManager,
+    MessageInArgs,
     emit_before,
     emit_after,
     EventEmitterMixin,
@@ -46,6 +47,7 @@ from .utils.data import (
     deep_fill_dict,
 )
 from .utils.nodeutils import run_until_complete
+from .utils.nodetqdm import NodeTqdm, TqdmState
 from funcnodes_core._logging import get_logger, FUNCNODES_LOGGER
 
 triggerlogger = get_logger("trigger")
@@ -374,6 +376,12 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         if self.trigger_on_create:
             if self.ready_to_trigger():
                 self.request_trigger()
+
+        self.progress = NodeTqdm(broadcast_func=self._broadcast_progress)
+
+    def _broadcast_progress(self, info: TqdmState):
+        msg = MessageInArgs(src=self, info=info)
+        self.emit("progress", msg)
 
     # region serialization
     @classmethod
@@ -801,7 +809,6 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             await asyncio.sleep(self._pretrigger_delay)
             self._trigger_open = False
             self.emit("triggerstart")
-            # run the function
 
             kwargs = {
                 ip.uuid: ip.value for ip in self._inputs if ip.value is not NoValue
@@ -811,15 +818,19 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             if "_triggerinput" in kwargs:
                 del kwargs["_triggerinput"]
             try:
+                self.progress.reset(total=None, n=0, desc="triggering")
+                # run the function
                 ans = await self.func(**kwargs)
                 # reset the inputs if requested
                 if self.reset_inputs_on_trigger:
                     for ip in self._inputs:
                         ip.set_value(ip.default, does_trigger=False)
+                self.progress.reset(desc="idle")
             except Exception as e:
                 err = e
 
             self.emit("triggerdone")
+
             # set the triggerdone event
             await self.asynceventmanager.set_and_clear("triggerdone")
             if err:
@@ -936,6 +947,9 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         self._inputs.clear()
         for op in list(self._outputs):
             self.remove_output(op)
+        if hasattr(self, "progress"):
+            self.progress.close()
+            del self.progress
         super().cleanup()
 
     def __del__(self):

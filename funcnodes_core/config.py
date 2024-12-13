@@ -177,6 +177,9 @@ class This(sys.__class__):  # sys.__class__ is <class 'module'>
     @IN_NODE_TEST.setter
     def IN_NODE_TEST(self, value):  # setter is also OK
         value = bool(value)
+        # if value is the same as the current value, do nothing
+        if value == self._IN_NODE_TEST:
+            return
         if value:
             set_in_test()
         self._IN_NODE_TEST = value
@@ -208,7 +211,9 @@ def set_in_test(clear=True):
                 pass
     check_config_dir()
 
-    from ._logging import set_logging_dir
+    # import here to avoid circular import
+
+    from ._logging import set_logging_dir  # noqa C0415 # pylint: disable=import-outside-toplevel
 
     set_logging_dir(os.path.join(BASE_CONFIG_DIR, "logs"))
 

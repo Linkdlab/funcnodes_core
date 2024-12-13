@@ -9,6 +9,9 @@ if not sys.warnoptions:
     warnings.simplefilter("error", DeprecationWarning)
 
 
+fn.config.IN_NODE_TEST = True
+
+
 class TestDecorator(unittest.IsolatedAsyncioTestCase):
     async def test_update_value_options_decorator(self):
         @fn.NodeDecorator(
@@ -28,6 +31,13 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
             return obj[key]
 
         node = select()
+
+        self.assertEqual(
+            len(node.inputs),
+            3,
+            f"Node should have 3 inputs: obj,key and _triggerinput, but has {node.inputs.keys()}.",
+        )
+
         node["obj"] = {"key1": "value1", "key2": "value2"}
         await node
 
@@ -40,6 +50,33 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
             "Node-key has no value_options.options attribute.",
         )
         self.assertEqual(node["key"].value_options["options"], ["key1", "key2"])
+
+    async def test_node_input_param(self):
+        called_node = []
+
+        @fn.NodeDecorator(
+            "test_node_input_param",
+            description="Test decorator for node param",
+        )
+        def select(a: int, node: fn.Node) -> int:
+            called_node.append(node)
+            return a + 1
+
+        node = select()
+
+        self.assertEqual(
+            len(node.inputs),
+            2,
+            f"Node should have 3 inputs: a and _triggerinput, but has {node.inputs.keys()}.",
+        )
+
+        node["a"] = 1
+
+        await node
+
+        self.assertEqual(node.outputs["out"].value, 2)
+        self.assertEqual(len(called_node), 1)
+        self.assertEqual(called_node[0], node)
 
     async def test_update_multiple_value_options_decorator(self):
         @fn.NodeDecorator(

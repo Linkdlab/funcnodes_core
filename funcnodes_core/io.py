@@ -831,7 +831,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
 
     def disconnect(self, other: Optional[Union[NodeInput, NodeOutput]] = None):
         if other is None:
-            for other in self._forwards_from:
+            for other in list(self._forwards_from):
                 other.unforward(self)
         else:
             if other in self._forwards_from:
