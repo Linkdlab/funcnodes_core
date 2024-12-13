@@ -184,7 +184,9 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
                     if hasattr(ref, "__dict__"):
                         pprint(vars(ref))
                 print(len(gc.get_referrers(g)))
-        self.assertEqual(garb, [])
+                raise ValueError("Node not deleted")
+
+        # self.assertEqual(garb, [])
 
     async def test_call_blocking_node(self):
         import time
