@@ -177,6 +177,9 @@ class This(sys.__class__):  # sys.__class__ is <class 'module'>
     @IN_NODE_TEST.setter
     def IN_NODE_TEST(self, value):  # setter is also OK
         value = bool(value)
+        # if value is the same as the current value, do nothing
+        if value == self._IN_NODE_TEST:
+            return
         if value:
             set_in_test()
         self._IN_NODE_TEST = value
