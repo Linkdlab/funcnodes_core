@@ -10,12 +10,13 @@ from typing import (
     Literal,
     Tuple,
     Any,
+    TYPE_CHECKING,
 )
 from abc import ABC, ABCMeta, abstractmethod
 import asyncio
 import inspect
 from uuid import uuid4
-from weakref import WeakValueDictionary
+from weakref import WeakValueDictionary, ref
 from .exceptions import NodeIdAlreadyExistsError
 from .io import (
     NodeInput,
@@ -49,6 +50,10 @@ from .utils.data import (
 from .utils.nodeutils import run_until_complete
 from .utils.nodetqdm import NodeTqdm, TqdmState
 from funcnodes_core._logging import get_logger, FUNCNODES_LOGGER
+
+if TYPE_CHECKING:
+    from .nodespace import NodeSpace
+
 
 triggerlogger = get_logger("trigger")
 
@@ -359,6 +364,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             render_options or RenderOptions(),  # type: ignore
             self.default_render_options,  # type: ignore
         )
+        self._nodespace: ref[NodeSpace] = None
 
         self._io_options: Dict[str, NodeInputOptions | NodeOutputOptions] = (
             deep_fill_dict(
@@ -603,6 +609,21 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         bool: The node disabled state
         """
         return self._disabled
+
+    @property
+    def nodespace(self) -> NodeSpace | None:
+        """Getter for the node's nodespace"""
+        if self._nodespace is None:
+            return None
+        return self._nodespace()
+
+    @nodespace.setter
+    def nodespace(self, value: NodeSpace | None):
+        """Setter for the node's nodespace"""
+        if value is None:
+            self._nodespace = None
+        else:
+            self._nodespace = ref(value)
 
     # endregion properties
 
