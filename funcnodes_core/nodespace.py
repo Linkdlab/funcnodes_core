@@ -138,20 +138,26 @@ class NodeSpace(EventEmitterMixin):
             self._properties["files_dir"] = None
         return self._properties["files_dir"]
 
-    def add_file(self, filename: str, path: str):
-        self.files[filename] = path
+    def add_file(self, filename: str, path: str | None = None):
+        self.files[filename] = path or filename
 
     def get_file_path(self, filename: str) -> str | None:
-        if filename in self.files["files"]:
-            fpath = self.files["files"][filename]
+        if filename in self.files:
+            fpath = self.files[filename]
             if not os.path.isabs(fpath) and self.files_dir is not None:
                 fpath = os.path.join(self.files_dir, fpath)
             return fpath
         return None
 
     def remove_file(self, filename: str):
-        if filename in self.files["files"]:
-            del self.files["files"][filename]
+        if filename in self.files:
+            del self.files[filename]
+
+    def _check_files(self):
+        """remives all nonexisting files from the files dict"""
+        for filename in list(self.files.keys()):
+            if not os.path.exists(self.get_file_path(filename)):
+                self.remove_file(filename)
 
     def delete_file(self, filename: str):
         filepath = self.get_file_path(filename)
@@ -304,6 +310,7 @@ class NodeSpace(EventEmitterMixin):
         self._properties = data.get("prop", {})
         self.deserialize_nodes(data.get("nodes", []))
         self.deserialize_edges(data.get("edges", []))
+        self._check_files()
 
     def serialize(self) -> NodeSpaceJSON:
         """serialize serializes the nodespace to a dictionary
