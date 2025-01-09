@@ -2,7 +2,7 @@ from typing import List, Dict, TypedDict, Tuple, Any
 import json
 from uuid import uuid4
 import traceback
-
+import os
 
 from .node import (
     FullNodeJSON,
@@ -113,6 +113,81 @@ class NodeSpace(EventEmitterMixin):
                     edges.append((inputstart, inputend))
 
         return edges
+
+    @property
+    def files(self) -> Dict[str, str]:
+        """
+        Returns a dictionary of all files in the NodeSpace.
+
+        Returns:
+          Dict[str, str]: A dictionary of all files in the NodeSpace.
+        """
+        if "files" not in self._properties:
+            self._properties["files"] = {}
+        return self._properties["files"]
+
+    @property
+    def files_dir(self) -> str | None:
+        """
+        Returns the directory path of the files in the NodeSpace.
+
+        Returns:
+          str: The directory path of the files in the NodeSpace.
+        """
+        if "files_dir" not in self._properties:
+            self._properties["files_dir"] = None
+        return self._properties["files_dir"]
+
+    def add_file(self, filename: str, path: str):
+        self.files[filename] = path
+
+    def get_file_path(self, filename: str) -> str | None:
+        if filename in self.files["files"]:
+            fpath = self.files["files"][filename]
+            if not os.path.isabs(fpath) and self.files_dir is not None:
+                fpath = os.path.join(self.files_dir, fpath)
+            return fpath
+        return None
+
+    def remove_file(self, filename: str):
+        if filename in self.files["files"]:
+            del self.files["files"][filename]
+
+    def delete_file(self, filename: str):
+        filepath = self.get_file_path(filename)
+        if filepath is not None and os.path.exists(filepath):
+            os.remove(filepath)
+
+    def set_property(self, key: str, value: Any):
+        """
+        Sets a property in the NodeSpace.
+
+        Args:
+          key (str): The key of the property to set.
+          value (Any): The value to set the property to.
+        """
+        # make sure value is json serializable and key is a string
+        if not isinstance(key, str):
+            raise ValueError("key must be a string")
+
+        try:
+            json.dumps(value)
+        except Exception as e:
+            raise ValueError(f"value must be json serializable: {e}")
+
+        self._properties[key] = value
+
+    def get_property(self, key: str) -> Any:
+        """
+        Gets a property from the NodeSpace.
+
+        Args:
+          key (str): The key of the property to get.
+
+        Returns:
+          Any: The value of the property.
+        """
+        return self._properties.get(key)
 
     # endregion Properties
 
@@ -268,6 +343,7 @@ class NodeSpace(EventEmitterMixin):
         if node.uuid in self._nodes:
             raise ValueError(f"node with uuid '{node.uuid}' already exists")
         self._nodes[node.uuid] = node
+        node.nodespace = self
         node.on("*", self.on_node_event)
         node.on_error(self.on_node_error)
         node_ser = node.serialize()
@@ -323,6 +399,7 @@ class NodeSpace(EventEmitterMixin):
             raise ValueError(f"node with uuid '{node.uuid}' not found in nodespace")
 
         node = self._nodes.pop(node.uuid)
+        node.nodespace = None
         node.off("*", self.on_node_event)
 
         for output in node.outputs.values():
