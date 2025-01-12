@@ -48,7 +48,7 @@ from .utils.data import (
     deep_fill_dict,
 )
 from .utils.nodeutils import run_until_complete
-from .utils.nodetqdm import NodeTqdm, TqdmState
+from .utils.nodetqdm import NodeTqdm, TqdmState, tqdm
 from funcnodes_core._logging import get_logger, FUNCNODES_LOGGER
 
 if TYPE_CHECKING:
@@ -383,7 +383,11 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             if self.ready_to_trigger():
                 self.request_trigger()
 
-        self.progress = NodeTqdm(broadcast_func=self._broadcast_progress)
+    @property
+    def progress(self) -> Type[tqdm]:
+        return lambda *args, **kwargs: NodeTqdm(
+            *args, broadcast_func=self._broadcast_progress, **kwargs
+        )
 
     def _broadcast_progress(self, info: TqdmState):
         msg = MessageInArgs(src=self, info=info)
@@ -839,14 +843,15 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             if "_triggerinput" in kwargs:
                 del kwargs["_triggerinput"]
             try:
-                self.progress(total=None, desc="triggering")
-                # run the function
-                ans = await self.func(**kwargs)
-                # reset the inputs if requested
-                if self.reset_inputs_on_trigger:
-                    for ip in self._inputs:
-                        ip.set_value(ip.default, does_trigger=False)
-                self.progress(total=None, desc="idle")
+                with self.progress(total=None, desc="triggering") as pbar:
+                    # run the function
+                    ans = await self.func(**kwargs)
+                    # reset the inputs if requested
+                    if self.reset_inputs_on_trigger:
+                        for ip in self._inputs:
+                            ip.set_value(ip.default, does_trigger=False)
+                    # pbar.update(1)
+                    pbar.set_description_str("idle", refresh=False)
             except Exception as e:
                 err = e
 
@@ -968,9 +973,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         self._inputs.clear()
         for op in list(self._outputs):
             self.remove_output(op)
-        if hasattr(self, "progress"):
-            self.progress.close()
-            del self.progress
+
         super().cleanup()
 
     def __del__(self):

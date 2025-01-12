@@ -53,7 +53,9 @@ class AsyncEventManager:
         Args:
             event (str): The name of the event to wait for.
         """
-        async with self._lock:  # Ensure thread-safe access to the _async_events dictionary.
+        async with (
+            self._lock
+        ):  # Ensure thread-safe access to the _async_events dictionary.
             if event not in self._async_events:
                 self._async_events[event] = asyncio.Event()
             pass
@@ -67,7 +69,9 @@ class AsyncEventManager:
         Args:
             event (str): The name of the event to set.
         """
-        async with self._lock:  # Ensure thread-safe access to the _async_events dictionary.
+        async with (
+            self._lock
+        ):  # Ensure thread-safe access to the _async_events dictionary.
             if event not in self._async_events:
                 self._async_events[event] = asyncio.Event()
 
@@ -80,7 +84,9 @@ class AsyncEventManager:
         Args:
             event (str): The name of the event to clear.
         """
-        async with self._lock:  # Ensure thread-safe access to the _async_events dictionary.
+        async with (
+            self._lock
+        ):  # Ensure thread-safe access to the _async_events dictionary.
             if event in self._async_events:
                 self._async_events[event].clear()
             pass

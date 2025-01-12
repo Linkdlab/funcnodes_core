@@ -217,7 +217,7 @@ def find_shelf_from_path(
             )
             # install pip requirements
             os.system(
-                f"{sys.executable} -m pip install -r {os.path.join(data['path'],'requirements.txt')}"
+                f"{sys.executable} -m pip install -r {os.path.join(data['path'], 'requirements.txt')}"
             )
 
     ndata = find_shelf_from_module(data)
