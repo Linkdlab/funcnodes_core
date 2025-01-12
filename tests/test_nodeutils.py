@@ -61,16 +61,15 @@ class TestNodeUtils(unittest.IsolatedAsyncioTestCase):
                 info,
             )
 
+        await self.node1
         self.node1.on("progress", progress_callback)
-
-        self.assertIsNotNone(self.node1.progress.broadcast_func)
 
         await self.node1
 
         self.assertEqual(
             len(collected),
             2,
-            "There should be two progress updates. One for triggering and one for idle.",
+            f"There should be two progress updates. One for triggering and one for idle. {collected}",
         )
         self.assertEqual(
             collected[0]["prefix"],

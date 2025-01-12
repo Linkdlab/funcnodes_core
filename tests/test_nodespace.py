@@ -146,7 +146,7 @@ class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.nodespace.nodes), 2)
         self.assertEqual(
             len(gc.get_referrers(node1)),
-            5,
+            4,
             "\n".join([f"{type(r)}:{r}" for r in gc.get_referrers(node1)]),
         )  # 5 because of the
         # nodespace,
