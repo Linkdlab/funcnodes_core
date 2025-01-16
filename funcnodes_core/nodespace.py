@@ -138,20 +138,15 @@ class NodeSpace(EventEmitterMixin):
             self._properties["files_dir"] = None
         return self._properties["files_dir"]
 
-    def add_file(self, filename: str, path: str | None = None):
-        self.files[filename] = path or filename
+    @files_dir.setter
+    def files_dir(self, value: str):
+        """
+        Sets the directory path of the files in the NodeSpace.
 
-    def get_file_path(self, filename: str) -> str | None:
-        if filename in self.files:
-            fpath = self.files[filename]
-            if not os.path.isabs(fpath) and self.files_dir is not None:
-                fpath = os.path.join(self.files_dir, fpath)
-            return fpath
-        return None
-
-    def remove_file(self, filename: str):
-        if filename in self.files:
-            del self.files[filename]
+        Args:
+          value (str): The directory path to set.
+        """
+        self._properties["files_dir"] = value
 
     def _check_files(self):
         """remives all nonexisting files from the files dict"""

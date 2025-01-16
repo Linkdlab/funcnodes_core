@@ -56,8 +56,14 @@ async def run_until_complete(*nodes: Node) -> None:
     Returns:
         None
     """
-    # Continue the loop while any node is in a trigger state.
+    # trigger nodes that are requested to be triggered
+    for node in nodes:
+        node.trigger_if_requested()
+
+    # Get the list of nodes that are in a trigger state.
     triggernodes = [node for node in nodes if node.in_trigger]
+
+    # Continue the loop while any node is in a trigger state.
     while triggernodes:
         # Wait for a short interval to prevent a tight loop that could lock up resources.
         await asyncio.gather(*[n.wait_for_trigger_finish() for n in triggernodes])
