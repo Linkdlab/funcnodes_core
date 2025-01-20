@@ -1,4 +1,5 @@
 from typing import Dict, Optional
+import gc
 from .config import update_render_options
 from .lib import check_shelf
 from ._logging import FUNCNODES_LOGGER
@@ -15,6 +16,7 @@ except (ModuleNotFoundError, ImportError):
 
 
 def setup_module(mod_data: InstalledModule) -> Optional[InstalledModule]:
+    gc.collect()
     entry_points = mod_data.entry_points
     mod = mod_data.module
     if not mod:
@@ -43,7 +45,9 @@ def setup_module(mod_data: InstalledModule) -> Optional[InstalledModule]:
                 break
     if "shelf" in entry_points:
         try:
-            entry_points["shelf"] = check_shelf(entry_points["shelf"])
+            entry_points["shelf"] = check_shelf(
+                entry_points["shelf"], parent_id=mod_data.name
+            )
         except ValueError as e:
             FUNCNODES_LOGGER.error("Error in module %s: %s" % (mod.__name__, e))
             del entry_points["shelf"]

@@ -9,6 +9,7 @@ from .lib import (
     flatten_shelves,
     check_shelf,
     ShelfReferenceLost,
+    SHELFE_REGISTRY,
 )
 
 from .libparser import module_to_shelf
@@ -30,4 +31,5 @@ __all__ = [
     "flatten_shelves",
     "check_shelf",
     "ShelfReferenceLost",
+    "SHELFE_REGISTRY",
 ]
