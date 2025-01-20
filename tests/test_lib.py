@@ -11,6 +11,7 @@ from funcnodes_core.lib import (
     Library,
     ShelfReferenceLost,
 )
+import gc
 
 
 @NodeDecorator("test_lib_testfunc")
@@ -106,7 +107,7 @@ class TestLib(unittest.TestCase):
     def test_lib_shelf_loseref(self):
         lib = Library()
         lib.add_shelf(NODE_SHELF)
-
+        gc.collect()
         with self.assertRaises(ShelfReferenceLost):
             print(lib.shelves)
 

@@ -1,9 +1,9 @@
 from __future__ import annotations
 from typing import List, Optional, TypedDict, Dict, Type, Tuple, Set, Sequence
-from funcnodes_core.node import Node, SerializedNodeClass
+from funcnodes_core.node import Node, SerializedNodeClass, REGISTERED_NODES
 from funcnodes_core.utils.serialization import JSONEncoder, Encdata
 from dataclasses import dataclass, field
-from weakref import ReferenceType, ref
+from weakref import WeakValueDictionary
 from ..eventmanager import EventEmitterMixin, emit_after
 
 
@@ -21,6 +21,8 @@ class Shelf:
     description: str = ""
     nodes: List[Type[Node]] = field(default_factory=list)
     subshelves: List[Shelf] = field(default_factory=list)
+    shelf_id: Optional[str] = None
+    parent_shelf: Optional[Shelf] = None
 
     @classmethod
     def from_dict(cls, data: Dict) -> Shelf:
@@ -29,7 +31,7 @@ class Shelf:
         if "name" not in data:
             raise ShelfError("name must be present")
 
-        return cls(
+        shelf = cls(
             nodes=data.get("nodes", []),
             subshelves=[
                 cls.from_dict(subshelf) for subshelf in data.get("subshelves", [])
@@ -37,6 +39,9 @@ class Shelf:
             name=data["name"],
             description=data.get("description", ""),
         )
+        for subshelf in shelf.subshelves:
+            subshelf.parent_shelf = shelf
+        return shelf
 
     def __eq__(self, value: object) -> bool:
         if not isinstance(value, Shelf):
@@ -67,6 +72,7 @@ class Shelf:
         self.nodes.append(node)
 
     def add_subshelf(self, shelf: Shelf):
+        shelf.parent_shelf = self
         self.subshelves.append(shelf)
 
 
@@ -76,41 +82,48 @@ class ShelfReferenceLost(ReferenceError):
 
 @dataclass
 class _InnerShelf:
-    nodes_ref: List[ReferenceType[Type[Node]]]
+    nodes_ref: List[str]
     inner_subshelves: List[_InnerShelf]
     name: str
     description: str
-    shelf: Optional[ReferenceType[Shelf]] = None
+    shelf_id: Optional[str] = None
 
     @property
     def nodes(self) -> List[Type[Node]]:
-        if self.shelf is not None:
-            return self.shelf().nodes
-        return [node() for node in self.nodes_ref if node() is not None]
+        if self.shelf_id is not None:
+            return self.to_shelf().nodes
+        return [
+            node
+            for node in [REGISTERED_NODES.get(nodeid) for nodeid in self.nodes_ref]
+            if node is not None
+        ]
 
     @property
     def subshelves(self) -> List[Shelf]:
-        if self.shelf is not None:
-            return self.shelf().subshelves
+        if self.shelf_id is not None:
+            return self.to_shelf().subshelves
         return [subshelf.to_shelf() for subshelf in self.inner_subshelves]
+        #     return self.shelf().subshelves
+        # return [subshelf.to_shelf() for subshelf in self.inner_subshelves]
 
     @classmethod
     def from_shelf(cls, shelf: Shelf) -> _InnerShelf:
         if not isinstance(shelf, Shelf):
             raise ValueError("shelf must be of type Shelf")
+        check_shelf(shelf)
         return cls(
-            nodes_ref=[ref(node) for node in shelf.nodes],
+            nodes_ref=[node.node_id for node in shelf.nodes],
             inner_subshelves=[
                 cls.from_shelf(subshelf) for subshelf in shelf.subshelves
             ],
             name=shelf.name,
             description=shelf.description,
-            shelf=ref(shelf),
+            shelf_id=shelf.shelf_id,
         )
 
     def _check_shelf(self):
-        if self.shelf is not None:
-            if self.shelf() is None:
+        if self.shelf_id is not None:
+            if SHELFE_REGISTRY.get(self.shelf_id) is None:
                 raise ShelfReferenceLost(
                     "Shelf reference is lost\n"
                     "This could happen if the shelf is not permanently stored e.g. if its added to the library "
@@ -119,9 +132,8 @@ class _InnerShelf:
 
     def to_shelf(self) -> Shelf:
         self._check_shelf()
-        if self.shelf is not None:
-            return self.shelf()
-
+        if self.shelf_id is not None:
+            return SHELFE_REGISTRY.get(self.shelf_id)
         return Shelf(
             nodes=self.nodes,
             subshelves=self.subshelves,
@@ -129,8 +141,11 @@ class _InnerShelf:
             description=self.description,
         )
 
+        # if self.shelf is not None:
+        #     return SHELFE_REGISTRY.get(self.shelf)()
+
     def add_node(self, node: Type[Node]):
-        self.nodes_ref.append(ref(node))
+        self.nodes_ref.append(node.node_id)
 
     def add_subshelf(self, shelf: Shelf):
         self._check_shelf()
@@ -233,6 +248,9 @@ def flatten_shelves(shelves: List[Shelf]) -> Tuple[List[Type[Node]], List[Shelf]
     return nodes, flat_shelves
 
 
+SHELFE_REGISTRY = WeakValueDictionary()
+
+
 def check_shelf(shelf: Shelf):
     # make shure required properties are present
     if isinstance(shelf, dict):
@@ -250,7 +268,21 @@ def check_shelf(shelf: Shelf):
     for node in shelf.nodes:
         if not issubclass(node, Node):
             raise ValueError(f"Node {node} is not a subclass of Node")
+
+    for subshelf in shelf.subshelves:
+        subshelf.parent_shelf = shelf
+
+    if shelf.shelf_id is None:
+        shelf.shelf_id = (
+            f"{shelf.parent_shelf.shelf_id}_" if shelf.parent_shelf else ""
+        ) + f"{shelf.name}_{shelf.description}"
     shelf.subshelves = [check_shelf(subshelf) for subshelf in shelf.subshelves]
+
+    if shelf.shelf_id in SHELFE_REGISTRY:
+        if shelf != SHELFE_REGISTRY[shelf.shelf_id]:
+            raise ValueError("Shelf with same id already exists")
+
+    SHELFE_REGISTRY[shelf.shelf_id] = shelf
 
     return shelf
 
