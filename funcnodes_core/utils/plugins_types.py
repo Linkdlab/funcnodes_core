@@ -36,6 +36,7 @@ class InstalledModule:
     entry_points: Dict[str, Any] = field(default_factory=dict)
     react_plugin: Optional[ReactPlugin] = None
     render_options: Optional[RenderOptions] = None
+    version: Optional[str] = None
 
     def __repr__(self) -> str:
         return (
