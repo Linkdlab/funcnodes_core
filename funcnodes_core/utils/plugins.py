@@ -1,6 +1,8 @@
 from typing import Dict
 
 from importlib.metadata import entry_points
+from importlib import reload
+import sys
 from .._logging import FUNCNODES_LOGGER
 from .plugins_types import InstalledModule
 
@@ -10,7 +12,10 @@ def get_installed_modules() -> Dict[str, InstalledModule]:
 
     for ep in entry_points(group="funcnodes.module"):
         try:
-            loaded = ep.load()  # should fail first
+            if ep.value in sys.modules:
+                loaded = reload(sys.modules[ep.value])
+            else:
+                loaded = ep.load()
             module_name = ep.value
 
             if module_name not in named_objects:
@@ -24,6 +29,7 @@ def get_installed_modules() -> Dict[str, InstalledModule]:
             if ep.name == "module":
                 named_objects[module_name].module = loaded
 
+            # Populate version and description if not already set
             if not named_objects[module_name].description:
                 try:
                     package_metadata = ep.dist.metadata
@@ -33,6 +39,12 @@ def get_installed_modules() -> Dict[str, InstalledModule]:
                 except Exception as e:
                     description = f"Could not retrieve description: {str(e)}"
                 named_objects[module_name].description = description
+
+            if not named_objects[module_name].version:
+                try:
+                    named_objects[module_name].version = ep.dist.version
+                except Exception:
+                    pass
 
         except Exception as exc:
             FUNCNODES_LOGGER.exception(exc)
