@@ -251,7 +251,7 @@ def flatten_shelves(shelves: List[Shelf]) -> Tuple[List[Type[Node]], List[Shelf]
 SHELFE_REGISTRY = WeakValueDictionary()
 
 
-def check_shelf(shelf: Shelf):
+def check_shelf(shelf: Shelf, parent_id: Optional[str] = None) -> Shelf:
     # make shure required properties are present
     if isinstance(shelf, dict):
         if "nodes" not in shelf:
@@ -273,10 +273,14 @@ def check_shelf(shelf: Shelf):
         subshelf.parent_shelf = shelf
 
     if shelf.shelf_id is None:
-        shelf.shelf_id = (
-            f"{shelf.parent_shelf.shelf_id}_" if shelf.parent_shelf else ""
-        ) + f"{shelf.name}_{shelf.description}"
-    shelf.subshelves = [check_shelf(subshelf) for subshelf in shelf.subshelves]
+        if parent_id is not None:
+            shelf.shelf_id = f"{parent_id}_{shelf.name}"
+        else:
+            shelf.shelf_id = f"{shelf.name}_{shelf.description}"
+
+    shelf.subshelves = [
+        check_shelf(subshelf, parent_id=shelf.shelf_id) for subshelf in shelf.subshelves
+    ]
 
     if shelf.shelf_id in SHELFE_REGISTRY:
         if shelf != SHELFE_REGISTRY[shelf.shelf_id]:
