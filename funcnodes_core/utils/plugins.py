@@ -45,7 +45,8 @@ def get_installed_modules() -> Dict[str, InstalledModule]:
                     named_objects[module_name].version = ep.dist.version
                 except Exception:
                     pass
-
+        except AttributeError:
+            raise
         except Exception as exc:
             FUNCNODES_LOGGER.exception(exc)
 
