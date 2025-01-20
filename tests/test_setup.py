@@ -20,8 +20,11 @@ class TestSetup(unittest.TestCase):
         module = fnc.AVAILABLE_MODULES["funcnodes_basic"].module
         self.assertIsNotNone(module)
         self.assertIsInstance(module, ModuleType)
-        print(module)
+        nodespace = fnc.NodeSpace()
+        nodespace.lib.add_shelf(funcnodes_basic.NODE_SHELF)
         _ = funcnodes_basic.lists.list_length()
         reload(module)
-        _ = funcnodes_basic.lists.list_length()
-        reload(module)
+        reload(funcnodes_basic)
+        reload(funcnodes_basic.lists)
+
+        print(list(fnc.lib.SHELFE_REGISTRY.keys()))

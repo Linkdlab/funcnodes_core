@@ -1061,6 +1061,7 @@ class FullNodeJSON(BaseNodeJSON):
 
 # region node registry
 REGISTERED_NODES: WeakValueDictionary[str, Type[Node]] = WeakValueDictionary()
+ALLOW_REGISTERED_NODES_OVERRIDE = False
 
 
 def _get_node_src(node: Type[Node]) -> str:
@@ -1095,10 +1096,17 @@ def register_node(node_class: Type[Node]):
     if node_id in REGISTERED_NODES:
         gc.collect()  # collect garbage to remove weak references
 
-    if node_id in REGISTERED_NODES:
-        raise NodeIdAlreadyExistsError(
-            f"Node with id '{node_id}' already exists at {_get_node_src(REGISTERED_NODES[node_id])}"
+    if node_id in REGISTERED_NODES and not ALLOW_REGISTERED_NODES_OVERRIDE:
+        old_node = REGISTERED_NODES[node_id]
+        allow = (  # same class in same module, so probably the same node
+            old_node.__module__ + old_node.__name__
+            == node_class.__module__ + node_class.__name__
         )
+
+        if not allow:
+            raise NodeIdAlreadyExistsError(
+                f"Node with id '{node_id}' already exists at {_get_node_src(REGISTERED_NODES[node_id])}"
+            )
 
     REGISTERED_NODES[node_id] = node_class
 
