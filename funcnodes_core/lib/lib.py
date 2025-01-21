@@ -282,9 +282,9 @@ def check_shelf(shelf: Shelf, parent_id: Optional[str] = None) -> Shelf:
         check_shelf(subshelf, parent_id=shelf.shelf_id) for subshelf in shelf.subshelves
     ]
 
-    if shelf.shelf_id in SHELFE_REGISTRY:
-        if shelf != SHELFE_REGISTRY[shelf.shelf_id]:
-            raise ValueError("Shelf with same id already exists")
+    # if shelf.shelf_id in SHELFE_REGISTRY and not ALLOW_SHELFE_OVERWRITE:
+    #     if shelf != SHELFE_REGISTRY[shelf.shelf_id]:
+    #         raise ValueError("Shelf with same id already exists")
 
     SHELFE_REGISTRY[shelf.shelf_id] = shelf
 
