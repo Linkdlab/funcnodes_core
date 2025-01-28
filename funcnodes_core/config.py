@@ -18,11 +18,12 @@ BASE_CONFIG_DIR = os.environ.get(
 DEFAULT_CONFIG = {
     "env_dir": os.path.join(BASE_CONFIG_DIR, "env"),
     "worker_manager": {
-        "host": "127.0.0.1",
+        "host": "localhost",
         "port": 9380,
     },
     "frontend": {
         "port": 8000,
+        "host": "localhost",
     },
 }
 
