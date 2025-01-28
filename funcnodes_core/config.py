@@ -164,9 +164,12 @@ def update_render_options(options: RenderOptions):
     )
 
 
-def reload():
+def reload(funcnodes_config_dir=None):
     global CONFIG, BASE_CONFIG_DIR, CONFIG_DIR
     load_dotenv(override=True)
+
+    if funcnodes_config_dir is not None:
+        os.environ["FUNCNODES_CONFIG_DIR"] = funcnodes_config_dir
 
     BASE_CONFIG_DIR = os.environ.get(
         "FUNCNODES_CONFIG_DIR", os.path.join(os.path.expanduser("~"), ".funcnodes")
@@ -175,6 +178,8 @@ def reload():
     CONFIG_DIR = BASE_CONFIG_DIR
     check_config_dir()
 
+
+reload()
 
 IN_NODE_TEST = False
 
