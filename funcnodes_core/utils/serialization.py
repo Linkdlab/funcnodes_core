@@ -136,63 +136,81 @@ class JSONEncoder(json.JSONEncoder):
             cls.encoder_registry[_enc_cls].insert(0, enc)
 
     @classmethod
-    def apply_custom_encoding(cls, obj, preview=False):
+    def apply_custom_encoding(cls, obj, preview=False, seen=None):
         """
         Recursively apply custom encoding to an object, using the encoders defined in JSONEncoder.
         """
-        # Attempt to apply custom encodings
-        obj_type = type(obj)
-        for base in obj_type.__mro__:
-            encoders = cls.encoder_registry.get(base)
-            if encoders:
-                for enc in encoders:
-                    # try:
-                    encres = enc(obj, preview)
+        if seen is None:
+            seen = set()
 
-                    if not isinstance(encres, Encdata):
-                        res, handled = encres
-                        encres = Encdata(data=res, handeled=handled)
-                    if encres.handeled:
-                        if encres.done:
-                            return encres.data
+        obj_id = id(obj)
+        if obj_id in seen:
+            # Circular reference detected.
+            raise ValueError("Circular reference detected.")
+        # Mark this object as seen.
+        seen.add(obj_id)
 
-                        return cls.apply_custom_encoding(
-                            encres.data,
-                            preview=(
-                                preview
-                                if encres.continue_preview is None
-                                else encres.continue_preview
-                            ),
-                        )
-                # except Exception as e:
-                #     pass
-        if isinstance(obj, (int, float, bool, type(None))):
-            # convert nan to None
-            if isinstance(obj, float) and obj != obj:
-                return None
-            # Base types
-            return obj
-        elif isinstance(obj, str):
-            if preview and len(obj) > 1000:
-                return obj[:1000] + "..."
-            return obj
-        elif isinstance(
-            obj, (dict, weakref.WeakKeyDictionary, weakref.WeakValueDictionary)
-        ):
-            # Handle dictionaries
-            return {
-                key: cls.apply_custom_encoding(value, preview=preview)
-                for key, value in obj.items()
-            }
-        elif isinstance(obj, (set, tuple, list, weakref.WeakSet)):
-            # Handle lists
-            obj = list(obj)
-            if preview:
-                return [cls.apply_custom_encoding(item, preview) for item in obj[:10]]
-            return [cls.apply_custom_encoding(item) for item in obj]
+        try:
+            # Attempt to apply custom encodings
+            obj_type = type(obj)
+            for base in obj_type.__mro__:
+                encoders = cls.encoder_registry.get(base)
+                if encoders:
+                    for enc in encoders:
+                        # try:
+                        encres = enc(obj, preview)
 
-        # Fallback to string representation
-        return str(obj)
+                        if not isinstance(encres, Encdata):
+                            res, handled = encres
+                            encres = Encdata(data=res, handeled=handled)
+                        if encres.handeled:
+                            if encres.done:
+                                return encres.data
+
+                            return cls.apply_custom_encoding(
+                                encres.data,
+                                preview=(
+                                    preview
+                                    if encres.continue_preview is None
+                                    else encres.continue_preview
+                                ),
+                                seen=seen,
+                            )
+                    # except Exception as e:
+                    #     pass
+            if isinstance(obj, (int, float, bool, type(None))):
+                # convert nan to None
+                if isinstance(obj, float) and obj != obj:
+                    return None
+                # Base types
+                return obj
+            elif isinstance(obj, str):
+                if preview and len(obj) > 1000:
+                    return obj[:1000] + "..."
+                return obj
+            elif isinstance(
+                obj, (dict, weakref.WeakKeyDictionary, weakref.WeakValueDictionary)
+            ):
+                # Handle dictionaries
+                return {
+                    key: cls.apply_custom_encoding(value, preview=preview, seen=seen)
+                    for key, value in obj.items()
+                }
+            elif isinstance(obj, (set, tuple, list, weakref.WeakSet)):
+                # Handle lists
+                obj = list(obj)
+                if preview:
+                    return [
+                        cls.apply_custom_encoding(item, preview, seen=seen)
+                        for item in obj[:10]
+                    ]
+                return [cls.apply_custom_encoding(item, seen=seen) for item in obj]
+
+            # Fallback to string representation
+            return str(obj)
+        finally:
+            # Remove this object from seen objects
+            seen.remove(obj_id)
 
     def default(self, obj):
         """
