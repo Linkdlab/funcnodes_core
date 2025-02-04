@@ -1,3 +1,4 @@
+from typing import Optional
 import logging
 from logging.handlers import RotatingFileHandler
 from .config import CONFIG_DIR
@@ -7,8 +8,44 @@ LOGGINGDIR = os.path.join(CONFIG_DIR, "logs")
 if not os.path.exists(LOGGINGDIR):
     os.makedirs(LOGGINGDIR)
 
+DEFAULT_MAX_FORMAT_LENGTH = os.environ.get("FUNCNODES_LOG_MAX_FORMAT_LENGTH", 1000)
 
-_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+class NotTooLongStringFormatter(logging.Formatter):
+    """
+    A custom logging formatter that truncates log messages if they exceed a specified maximum length.
+
+    Attributes:
+        max_length (int): The maximum length of the log message.
+          If the message exceeds this length, it will be truncated.
+    """
+
+    def __init__(self, *args, max_length: Optional[int] = None, **kwargs):
+        if max_length is None:
+            max_length = os.environ.get(
+                "FUNCNODES_LOG_MAX_FORMAT_LENGTH", DEFAULT_MAX_FORMAT_LENGTH
+            )
+        super(NotTooLongStringFormatter, self).__init__(*args, **kwargs)
+        self.max_length = max(max_length - 3, 0)
+
+    def format(self, record):
+        """
+        Formats the specified log record as text. If the log message exceeds the maximum length, it is truncated.
+
+        Args:
+            record (logging.LogRecord): The log record to be formatted.
+
+        Returns:
+            str: The formatted log message.
+        """
+        if len(record.msg) > self.max_length:
+            record.msg = record.msg[: self.max_length] + "..."
+        return super().format(record)
+
+
+_formatter = NotTooLongStringFormatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
 # Add the handler to the logger
 
@@ -187,12 +224,14 @@ def set_logging_dir(path):
     _update_logger_handlers(FUNCNODES_LOGGER, prev_dir=prev_dir)
 
 
-def set_format(fmt: str):
+def set_format(fmt: str, max_length: Optional[int] = None):
     """
     Sets the log formatting string. The format string will be used for all log handlers.
 
     Args:
       fmt (str): The format string for log messages.
+      max_length (Optional[int]): The maximum length of the log message.
+        If the message exceeds this length, it will be truncated.
 
     Returns:
       None
@@ -202,7 +241,11 @@ def set_format(fmt: str):
     """
 
     global _formatter
-    _formatter = logging.Formatter(fmt)
+    if max_length is None:
+        max_length = os.environ.get(
+            "FUNCNODES_LOG_MAX_FORMAT_LENGTH", DEFAULT_MAX_FORMAT_LENGTH
+        )
+    _formatter = NotTooLongStringFormatter(fmt, max_length=max_length)
     _update_logger_handlers(FUNCNODES_LOGGER)
 
 
