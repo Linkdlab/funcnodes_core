@@ -25,7 +25,7 @@ from .lib import (
     flatten_shelves,
 )
 from .nodemaker import NodeClassMixin, NodeDecorator, instance_nodefunction
-from ._logging import FUNCNODES_LOGGER, get_logger
+from ._logging import FUNCNODES_LOGGER, get_logger, set_log_format
 
 from .data import DataEnum
 
@@ -76,6 +76,7 @@ __all__ = [
     "NodeClassNotFoundError",
     "FUNCNODES_LOGGER",
     "get_logger",
+    "set_log_format",
     "instance_nodefunction",
     "config",
     "RenderOptions",
