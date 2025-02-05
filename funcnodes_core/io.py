@@ -841,8 +841,11 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
 
         super().disconnect(other=other)
 
-        if len(self._connected) + len(self._forwards_from) == 0:
+        if not self.is_connected():
             self.set_value(self.default, does_trigger=False)
+
+    def is_connected(self):
+        return super().is_connected() or len(self._forwards_from) > 0
 
     @classmethod
     def from_serialized_input(cls, serialized_input: FunctionInputParam) -> NodeInput:

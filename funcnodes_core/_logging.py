@@ -8,7 +8,8 @@ LOGGINGDIR = os.path.join(CONFIG_DIR, "logs")
 if not os.path.exists(LOGGINGDIR):
     os.makedirs(LOGGINGDIR)
 
-DEFAULT_MAX_FORMAT_LENGTH = os.environ.get("FUNCNODES_LOG_MAX_FORMAT_LENGTH", 1000)
+DEFAULT_MAX_FORMAT_LENGTH = os.environ.get("FUNCNODES_LOG_MAX_FORMAT_LENGTH", 5000)
+DEFAULT_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 
 class NotTooLongStringFormatter(logging.Formatter):
@@ -38,13 +39,19 @@ class NotTooLongStringFormatter(logging.Formatter):
         Returns:
             str: The formatted log message.
         """
-        if len(record.msg) > self.max_length:
-            record.msg = record.msg[: self.max_length] + "..."
-        return super().format(record)
+        s = super().format(record)
+
+        # Do not truncate if there's exception information (traceback)
+        if record.exc_info:
+            return s
+
+        if len(s) > self.max_length:
+            s = s[: self.max_length] + "..."
+        return s
 
 
 _formatter = NotTooLongStringFormatter(
-    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    DEFAULT_FORMAT, max_length=DEFAULT_MAX_FORMAT_LENGTH
 )
 
 # Add the handler to the logger
@@ -224,7 +231,7 @@ def set_logging_dir(path):
     _update_logger_handlers(FUNCNODES_LOGGER, prev_dir=prev_dir)
 
 
-def set_format(fmt: str, max_length: Optional[int] = None):
+def set_log_format(fmt: str = DEFAULT_FORMAT, max_length: Optional[int] = None):
     """
     Sets the log formatting string. The format string will be used for all log handlers.
 
@@ -257,4 +264,4 @@ _update_logger_handlers(FUNCNODES_LOGGER)
 set_logging_dir(LOGGINGDIR)
 
 
-__all__ = ["FUNCNODES_LOGGER", "get_logger", "set_logging_dir", "set_format"]
+__all__ = ["FUNCNODES_LOGGER", "get_logger", "set_logging_dir", "set_log_format"]
