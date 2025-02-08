@@ -1,10 +1,19 @@
 from typing import Generic, Callable, TypeVar, ParamSpec, Awaitable, Union, Type
 import asyncio
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
-import dill
-from multiprocessing import get_context
 
+
+try:
+    from multiprocessing import get_context
+    from concurrent.futures import ProcessPoolExecutor
+    import dill
+
+    MULTIPROCESSING = True
+except (ImportError, ModuleNotFoundError):
+    MULTIPROCESSING = False
+
+MULTIPROCESSING = False
 P = ParamSpec("P")
 R = TypeVar("R")
 
@@ -225,6 +234,12 @@ def make_sync_if_needed(func: Callable[P, Union[R, Awaitable[R]]]) -> Callable[P
         return func
 
 
+if MULTIPROCESSING:
+    executor_class_type = Union[Type[ThreadPoolExecutor], Type[ProcessPoolExecutor]]
+else:
+    executor_class_type = Type[ThreadPoolExecutor]
+
+
 class ExecutorWrapper(Generic[P, R]):
     """
     A wrapper that runs a function (synchronous or asynchronous) in a new thread or process
@@ -251,9 +266,7 @@ class ExecutorWrapper(Generic[P, R]):
             Calls the `run_in_thread` method, allowing the wrapper to be invoked like a function.
     """
 
-    executor_class: Union[Type[ThreadPoolExecutor], Type[ProcessPoolExecutor]] = (
-        ThreadPoolExecutor
-    )
+    executor_class: executor_class_type = ThreadPoolExecutor
 
     def __new__(cls, func, *args, **kwargs):
         res = super().__new__(
@@ -360,59 +373,6 @@ class ThreadExecutorWrapper(ExecutorWrapper[P, R]):
     executor_class = ThreadPoolExecutor
 
 
-class DillProcessPoolExecutor(ProcessPoolExecutor):
-    """
-    A custom ProcessPoolExecutor that uses dill for pickling.
-    """
-
-    def __init__(self, *args, **kwargs):
-        # Ensure the context is set to 'spawn' to avoid issues with forking and dill
-        kwargs["mp_context"] = get_context("spawn")
-        super().__init__(*args, **kwargs)
-
-    def _get_function_and_args(
-        self, func: Callable[P, R], *args: P.args, **kwargs: P.kwargs
-    ):
-        """
-        Custom serialization using dill.
-        """
-
-        func_dill = dill.dumps(func)
-        args_dill = dill.dumps((args, kwargs))
-        return func_dill, args_dill
-
-    def submit(self, func: Callable[P, R], *args: P.args, **kwargs: P.kwargs):
-        func_dill, args_dill = self._get_function_and_args(func, *args, **kwargs)
-        return super().submit(self._dill_worker, func_dill, args_dill)
-
-    @staticmethod
-    def _dill_worker(func_dill, args_dill):
-        """
-        A worker function that unpacks dill serialized data.
-        """
-        func = dill.loads(func_dill)
-        args, kwargs = dill.loads(args_dill)
-        result = func(*args, **kwargs)
-        return dill.dumps(result)
-
-
-class ProcessExecutorWrapper(ExecutorWrapper[P, R]):
-    """
-    A wrapper that runs a function (synchronous or asynchronous) in a new process with a ProcessPoolExecutor.
-
-    This class is a subclass of `ExecutorWrapper` that specifically uses a `ProcessPoolExecutor`
-    to run the wrapped function in a separate process.
-    """
-
-    executor_class = DillProcessPoolExecutor
-
-    async def run_in_executor(self, *args: P.args, **kwargs: P.kwargs) -> Awaitable[R]:
-        future = self.executor.submit(call_sync, self.func, *args, **kwargs)
-
-        result = await asyncio.wrap_future(future)
-        return dill.loads(result)
-
-
 def make_run_in_new_thread(
     func: Callable[P, Union[R, Awaitable[R]]],
 ) -> ThreadExecutorWrapper[P, Awaitable[R]]:
@@ -445,31 +405,90 @@ def make_run_in_new_thread(
     return ThreadExecutorWrapper(func)
 
 
-def make_run_in_new_process(
-    func: Callable[P, Union[R, Awaitable[R]]],
-) -> ProcessExecutorWrapper[P, Awaitable[R]]:
-    """
-    Wraps a function (synchronous or asynchronous) to run in a new process with its own ProcessPoolExecutor.
+if MULTIPROCESSING:
 
-    This function returns a `ProcessExecutorWrapper` object that manages the execution of the provided
-    function in a separate process. The returned wrapper is callable and returns an awaitable result.
+    class DillProcessPoolExecutor(ProcessPoolExecutor):
+        """
+        A custom ProcessPoolExecutor that uses dill for pickling.
+        """
 
-    Args:
-        func (Callable[P, Union[R, Awaitable[R]]]): The function to be wrapped, which can be synchronous
-            or asynchronous.
+        def __init__(self, *args, **kwargs):
+            # Ensure the context is set to 'spawn' to avoid issues with forking and dill
+            kwargs["mp_context"] = get_context("spawn")
+            super().__init__(*args, **kwargs)
 
-    Returns:
-        ProcessExecutorWrapper[P, Awaitable[R]]: A `ProcessExecutorWrapper` object that runs the function
-            in a new process.
+        def _get_function_and_args(
+            self, func: Callable[P, R], *args: P.args, **kwargs: P.kwargs
+        ):
+            """
+            Custom serialization using dill.
+            """
 
-    Example:
-        >>> def cpu_bound_function(x: int) -> int:
-        ...     return sum(i * i for i in range(x))
-        ...
-        >>> async_function = make_run_in_new_process(cpu_bound_function)
-        >>> result = await async_function(1000000)
-        >>> print(result)
-        ...
-        >>> async_function.shutdown()  # Ensure that the executor is properly shut down
-    """
-    return ProcessExecutorWrapper(func)
+            func_dill = dill.dumps(func)
+            args_dill = dill.dumps((args, kwargs))
+            return func_dill, args_dill
+
+        def submit(self, func: Callable[P, R], *args: P.args, **kwargs: P.kwargs):
+            func_dill, args_dill = self._get_function_and_args(func, *args, **kwargs)
+            return super().submit(self._dill_worker, func_dill, args_dill)
+
+        @staticmethod
+        def _dill_worker(func_dill, args_dill):
+            """
+            A worker function that unpacks dill serialized data.
+            """
+            func = dill.loads(func_dill)
+            args, kwargs = dill.loads(args_dill)
+            result = func(*args, **kwargs)
+            return dill.dumps(result)
+
+    class ProcessExecutorWrapper(ExecutorWrapper[P, R]):
+        """
+        A wrapper that runs a function (synchronous or asynchronous) in a new process with a ProcessPoolExecutor.
+
+        This class is a subclass of `ExecutorWrapper` that specifically uses a `ProcessPoolExecutor`
+        to run the wrapped function in a separate process.
+        """
+
+        executor_class = DillProcessPoolExecutor
+
+        async def run_in_executor(
+            self, *args: P.args, **kwargs: P.kwargs
+        ) -> Awaitable[R]:
+            future = self.executor.submit(call_sync, self.func, *args, **kwargs)
+
+            result = await asyncio.wrap_future(future)
+            return dill.loads(result)
+
+    def make_run_in_new_process(
+        func: Callable[P, Union[R, Awaitable[R]]],
+    ) -> ProcessExecutorWrapper[P, Awaitable[R]]:
+        """
+        Wraps a function (synchronous or asynchronous) to run in a new process with its own ProcessPoolExecutor.
+
+        This function returns a `ProcessExecutorWrapper` object that manages the execution of the provided
+        function in a separate process. The returned wrapper is callable and returns an awaitable result.
+
+        Args:
+            func (Callable[P, Union[R, Awaitable[R]]]): The function to be wrapped, which can be synchronous
+                or asynchronous.
+
+        Returns:
+            ProcessExecutorWrapper[P, Awaitable[R]]: A `ProcessExecutorWrapper` object that runs the function
+                in a new process.
+
+        Example:
+            >>> def cpu_bound_function(x: int) -> int:
+            ...     return sum(i * i for i in range(x))
+            ...
+            >>> async_function = make_run_in_new_process(cpu_bound_function)
+            >>> result = await async_function(1000000)
+            >>> print(result)
+            ...
+            >>> async_function.shutdown()  # Ensure that the executor is properly shut down
+        """
+        return ProcessExecutorWrapper(func)
+
+else:
+    ProcessExecutorWrapper = ThreadExecutorWrapper
+    make_run_in_new_process = make_run_in_new_thread

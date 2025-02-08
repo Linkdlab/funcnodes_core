@@ -38,12 +38,19 @@ class InstalledModule:
     render_options: Optional[RenderOptions] = None
     version: Optional[str] = None
 
+    @property
+    def rep_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "description": self.description,
+            "entry_points": list(self.entry_points.keys()),
+            "version": self.version,
+            "react_plugin": self.react_plugin is not None,
+            "render_options": self.render_options is not None,
+        }
+
     def __repr__(self) -> str:
-        return (
-            f"InstalledModule(name={self.name}, description={self.description}, "
-            f"entry_points={self.entry_points.keys()}, react_plugin={self.react_plugin is not None}, "
-            f"render_options={self.render_options is not None})"
-        )
+        return f"InstalledModule({', '.join(f'{k}={v}' for k, v in self.rep_dict.items())})"
 
     def __str__(self) -> str:
         return self.__repr__()
