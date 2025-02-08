@@ -16,7 +16,7 @@ def get_installed_modules() -> Dict[str, InstalledModule]:
                 loaded = reload(sys.modules[ep.value])
             else:
                 loaded = ep.load()
-            module_name = ep.value
+            module_name = ep.module
 
             if module_name not in named_objects:
                 named_objects[module_name] = InstalledModule(

@@ -2,6 +2,8 @@ import unittest
 import funcnodes_core as fn
 from typing import Tuple
 import sys
+import asyncio
+import time
 
 if not sys.warnoptions:
     import warnings
@@ -10,6 +12,23 @@ if not sys.warnoptions:
 
 
 fn.config.IN_NODE_TEST = True
+
+
+class DummyNode(fn.Node):
+    node_id = "dummy_nodedec"
+    input = fn.NodeInput(
+        id="input",
+        type=int,
+        default=1,
+        description="i1",
+        value_options={"options": [1, 2]},
+    )
+    output = fn.NodeOutput(id="output", type=int)
+    default_render_options = {"data": {"src": "input"}}
+
+    async def func(self, input: int) -> int:
+        self.outputs["output"].value = input
+        return input
 
 
 class TestDecorator(unittest.IsolatedAsyncioTestCase):
@@ -291,3 +310,202 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(node["key2"].value_options["options"], ["key1", "key2"])
+
+    async def test_superclass(self):
+        class BaseNode(fn.Node):
+            """
+            `Abstract` base class does not need a `func` method or a `node_id`
+            """
+
+            my_id = fn.NodeOutput(id="my_id", type=int)
+
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.outputs["my_id"].value = id(self)
+
+        @fn.NodeDecorator(node_id="my_node", superclass=BaseNode)
+        def my_node(input1: int, input2: int) -> int:
+            result = input1 + input2
+            return result
+
+        ins = my_node()
+        ins["input1"] = 1
+        ins["input2"] = 2
+        await ins
+
+        self.assertEqual(ins.outputs["out"].value, 3)
+        self.assertEqual(ins.outputs["my_id"].value, id(ins))
+
+    async def test_call_blocking_node(self):
+        @fn.NodeDecorator(node_id="blocking_node")
+        def BlockingNode(input: int) -> int:
+            start = time.time()
+            while True:
+                if time.time() - start > 1:
+                    break
+            return input
+
+        test_node1 = BlockingNode()
+        test_node2 = BlockingNode()
+
+        enternode = DummyNode()
+
+        enternode.outputs["output"].connect(test_node1.inputs["input"])
+        enternode.outputs["output"].connect(test_node2.inputs["input"])
+
+        start = time.time()
+
+        await fn.run_until_complete(enternode, test_node1, test_node2)
+        end = time.time()
+        self.assertEqual(enternode.outputs["output"].value, 1)
+        self.assertEqual(test_node1.outputs["out"].value, 1)
+        self.assertEqual(test_node2.outputs["out"].value, 1)
+        self.assertGreaterEqual(end - start, 2)
+
+    async def test_call_separate_thread(self):
+        @fn.NodeDecorator(node_id="non_blocking_node", separate_thread=True)
+        def NoneBlockingNode(input: int) -> int:
+            print("Start")
+            time.sleep(1)
+            print("End")
+            return input
+
+        test_node1 = NoneBlockingNode()
+        test_node2 = NoneBlockingNode()
+
+        enternode = DummyNode()
+
+        enternode.outputs["output"].connect(test_node1.inputs["input"])
+        enternode.outputs["output"].connect(test_node2.inputs["input"])
+        start = time.time()
+        fn.FUNCNODES_LOGGER.info("Start wait")
+        await fn.run_until_complete(enternode, test_node1, test_node2)
+        fn.FUNCNODES_LOGGER.info("End wait")
+        end = time.time()
+        self.assertEqual(enternode.outputs["output"].value, 1)
+        self.assertEqual(test_node1.outputs["out"].value, 1)
+        self.assertEqual(test_node2.outputs["out"].value, 1)
+        self.assertLessEqual(end - start, 2)
+        self.assertGreaterEqual(end - start, 1)
+
+    async def test_call_separate_thread_output_trigger(self):
+        @fn.NodeDecorator(node_id="non_blocking_node_t", separate_thread=True)
+        def NoneBlockingNode(input: int) -> int:
+            print("Start")
+            time.sleep(1)
+            print("End")
+            return input
+
+        bn = NoneBlockingNode()
+        dum = DummyNode()
+
+        bn.outputs["out"].connect(dum.inputs["input"])
+        bn.inputs["input"].value = 1
+        await fn.run_until_complete(bn, dum)
+
+        self.assertEqual(bn.outputs["out"].value, 1)
+        self.assertEqual(dum.inputs["input"].value, 1)
+        self.assertEqual(dum.outputs["output"].value, 1)
+
+    async def test_call_separate_process(self):
+        @fn.NodeDecorator(node_id="non_blocking_node", separate_process=True)
+        def NoneBlockingNode(input: int) -> int:
+            print("Start")
+            time.sleep(2)
+            print("End")
+            return input
+
+        test_node1 = NoneBlockingNode()
+        test_node2 = NoneBlockingNode()
+
+        enternode = DummyNode()
+
+        enternode.outputs["output"].connect(test_node1.inputs["input"])
+        enternode.outputs["output"].connect(test_node2.inputs["input"])
+        start = time.time()
+        fn.FUNCNODES_LOGGER.info("Start wait")
+        await fn.run_until_complete(enternode, test_node1, test_node2)
+        fn.FUNCNODES_LOGGER.info("End wait")
+        end = time.time()
+        self.assertEqual(enternode.outputs["output"].value, 1)
+        self.assertEqual(test_node1.outputs["out"].value, 1)
+        self.assertEqual(test_node2.outputs["out"].value, 1)
+        self.assertLessEqual(end - start, 4)
+        self.assertGreaterEqual(end - start, 2)
+
+    async def test_call_separate_process_output_trigger(self):
+        @fn.NodeDecorator(node_id="non_blocking_node_t", separate_thread=True)
+        def NoneBlockingNode(input: int) -> int:
+            print("Start")
+            time.sleep(1)
+            print("End")
+            return input
+
+        bn = NoneBlockingNode()
+        dum = DummyNode()
+        bn.inputs["input"].value = 1
+        self.assertEqual(bn.inputs["input"].value, 1)
+        bn.outputs["out"].connect(dum.inputs["input"])
+        await fn.run_until_complete(bn, dum)
+
+        self.assertEqual(bn.outputs["out"].value, 1)
+        self.assertEqual(dum.inputs["input"].value, 1)
+        self.assertEqual(dum.outputs["output"].value, 1)
+
+    async def test_to_thread(self):
+        @fn.NodeDecorator(node_id="my_node")
+        async def my_node(input1: int, input2: int) -> int:
+            def heavy_task(input1, input2):
+                time.sleep(1)
+                return input1 + input2
+
+            result = await asyncio.to_thread(heavy_task, input1, input2)
+            return result
+
+        test_node1 = my_node()
+        test_node2 = my_node()
+
+        test_node1.inputs["input1"].value = 1
+        test_node1.inputs["input2"].value = 2
+        test_node2.inputs["input1"].value = 3
+        test_node2.inputs["input2"].value = 4
+
+        start = time.time()
+        await fn.run_until_complete(test_node1, test_node2)
+        end = time.time()
+
+        self.assertEqual(test_node1.outputs["out"].value, 3)
+        self.assertEqual(test_node2.outputs["out"].value, 7)
+        self.assertLessEqual(end - start, 2)
+        self.assertGreaterEqual(end - start, 1)
+
+    def test_description(self):
+        @fn.NodeDecorator(
+            node_id="my_node1", description="This is a node created with the decorator"
+        )
+        def my_node1(ip: int) -> float:
+            return ip / 2
+
+        @fn.NodeDecorator(node_id="my_node2")
+        def my_node2(ip: int) -> float:
+            """This is a node created with the decorator and a docstring"""
+            return ip / 2
+
+        class MyNode(fn.Node):
+            node_name = "My Node Class"
+            node_id = "my_node3"
+            description = "This is a node created with the class"
+
+            ip = fn.NodeInput(id="ip", type=int)
+
+            async def func(self, ip):
+                self.outputs["output1"].value = ip / 2
+
+        self.assertEqual(
+            my_node1().description, "This is a node created with the decorator"
+        )
+        self.assertEqual(
+            my_node2().description,
+            "This is a node created with the decorator and a docstring",
+        )
+        self.assertEqual(MyNode().description, "This is a node created with the class")
