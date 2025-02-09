@@ -1,4 +1,4 @@
-__version__ = "0.3.20"
+__version__ = "0.3.21"
 
 from .io import (
     NodeInput,
@@ -11,6 +11,9 @@ from .io import (
     NoValue,
     SameNodeConnectionError,
     NodeIOSerialization,
+    IOOptions,
+    NodeOutputOptions,
+    NodeInputOptions,
 )
 
 from .node import Node, get_nodeclass, NodeJSON, IONotFoundError, NodeTriggerError
@@ -24,6 +27,10 @@ from .lib import (
     flatten_shelf,
     flatten_shelves,
 )
+from . import lib
+from . import nodemaker
+from . import _logging as logging
+
 from .nodemaker import NodeClassMixin, NodeDecorator, instance_nodefunction
 from ._logging import FUNCNODES_LOGGER, get_logger, set_log_format
 
@@ -99,4 +106,10 @@ __all__ = [
     "emit_after",
     "emit_before",
     "signaturewrapper",
+    "IOOptions",
+    "NodeOutputOptions",
+    "NodeInputOptions",
+    "lib",
+    "nodemaker",
+    "logging",
 ]
