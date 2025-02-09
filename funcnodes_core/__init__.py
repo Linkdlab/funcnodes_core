@@ -27,6 +27,10 @@ from .lib import (
     flatten_shelf,
     flatten_shelves,
 )
+from . import lib
+from . import nodemaker
+from . import _logging as logging
+
 from .nodemaker import NodeClassMixin, NodeDecorator, instance_nodefunction
 from ._logging import FUNCNODES_LOGGER, get_logger, set_log_format
 
@@ -105,4 +109,7 @@ __all__ = [
     "IOOptions",
     "NodeOutputOptions",
     "NodeInputOptions",
+    "lib",
+    "nodemaker",
+    "logging",
 ]
