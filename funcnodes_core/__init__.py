@@ -1,4 +1,4 @@
-__version__ = "0.3.20"
+__version__ = "0.3.21"
 
 from .io import (
     NodeInput,
@@ -11,6 +11,9 @@ from .io import (
     NoValue,
     SameNodeConnectionError,
     NodeIOSerialization,
+    IOOptions,
+    NodeOutputOptions,
+    NodeInputOptions,
 )
 
 from .node import Node, get_nodeclass, NodeJSON, IONotFoundError, NodeTriggerError
@@ -99,4 +102,7 @@ __all__ = [
     "emit_after",
     "emit_before",
     "signaturewrapper",
+    "IOOptions",
+    "NodeOutputOptions",
+    "NodeInputOptions",
 ]
