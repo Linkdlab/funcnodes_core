@@ -2,6 +2,7 @@ import os
 import json
 from .utils.data import deep_fill_dict
 from .utils.plugins_types import RenderOptions
+from .utils.files import write_json_secure
 from dotenv import load_dotenv
 from exposedfunctionality.function_parser.types import type_to_string
 import tempfile
@@ -46,11 +47,8 @@ def write_config(path, config):
     Examples:
       >>> write_config("config.json", {"env_dir": "env"})
     """
-    with open(path, "w+") as f:
-        json.dump(config, f, indent=2)
-
-    with open(path + ".bu", "w+") as f:
-        json.dump(config, f, indent=2)
+    write_json_secure(config, path, indent=2)
+    write_json_secure(config, path + ".bu", indent=2)
 
 
 def load_config(path):
