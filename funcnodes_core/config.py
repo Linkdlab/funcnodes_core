@@ -1,4 +1,4 @@
-from typing import Optional, TypedDict
+from typing import Optional, TypedDict, List, Literal
 from pathlib import Path
 import os
 import json
@@ -10,11 +10,17 @@ from exposedfunctionality.function_parser.types import type_to_string
 import tempfile
 import shutil
 import sys
+import warnings
+from .utils.deprecations import (
+    path_module_attribute_to_getter,
+    method_deprecated_decorator,
+    FuncNodesDeprecationWarning,
+)
 
 load_dotenv(override=True)
 
 
-BASE_CONFIG_DIR = Path(
+_BASE_CONFIG_DIR = Path(
     os.environ.get("FUNCNODES_CONFIG_DIR", Path.home() / ".funcnodes")
 )
 
@@ -36,7 +42,7 @@ class ConfigType(TypedDict, total=False):
 
 
 DEFAULT_CONFIG: ConfigType = {
-    "env_dir": (BASE_CONFIG_DIR / "env").as_posix(),
+    "env_dir": (_BASE_CONFIG_DIR / "env").as_posix(),
     "worker_manager": {
         "host": "localhost",
         "port": 9380,
@@ -48,8 +54,9 @@ DEFAULT_CONFIG: ConfigType = {
 }
 
 
-CONFIG = DEFAULT_CONFIG
-CONFIG_DIR = BASE_CONFIG_DIR
+_CONFIG = DEFAULT_CONFIG
+_CONFIG_DIR = _BASE_CONFIG_DIR
+_CONFIG_CHANGED = True
 
 
 def _bupath(path: Path) -> Path:
@@ -102,7 +109,7 @@ def load_config(path: Path):
     Examples:
       >>> load_config("config.json")
     """
-    global CONFIG
+    global _CONFIG
     config: Optional[ConfigType] = None
     path = Path(path)
     try:
@@ -123,7 +130,7 @@ def load_config(path: Path):
 
     deep_fill_dict(config, DEFAULT_CONFIG, inplace=True)
     write_config(path, config)
-    CONFIG = config
+    _CONFIG = config
 
 
 def check_config_dir():
@@ -136,18 +143,45 @@ def check_config_dir():
     Examples:
       >>> check_config_dir()
     """
-    global CONFIG_DIR
-    if not BASE_CONFIG_DIR.exists():
-        BASE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    load_config(BASE_CONFIG_DIR / "config.json")
-    if "custom_config_dir" in CONFIG:
-        load_config(Path(CONFIG["custom_config_dir"]) / "config.json")
-        CONFIG_DIR = CONFIG["custom_config_dir"]
+    global _CONFIG_DIR, _CONFIG_CHANGED
+    if not _BASE_CONFIG_DIR.exists():
+        _BASE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    load_config(_BASE_CONFIG_DIR / "config.json")
+    if "custom_config_dir" in _CONFIG:
+        load_config(Path(_CONFIG["custom_config_dir"]) / "config.json")
+        _CONFIG_DIR = _CONFIG["custom_config_dir"]
     else:
-        CONFIG_DIR = BASE_CONFIG_DIR
+        _CONFIG_DIR = _BASE_CONFIG_DIR
+
+    _CONFIG_CHANGED = False
 
 
-check_config_dir()
+def get_config_dir() -> Path:
+    """
+    Returns the configuration directory.
+
+    Returns:
+      str: The configuration directory.
+
+    Examples:
+      >>> get_config_dir()
+    """
+    return _CONFIG_DIR
+
+
+def get_config() -> ConfigType:
+    """
+    Returns the configuration.
+
+    Returns:
+      dict: The configuration.
+
+    Examples:
+      >>> get_config()
+    """
+    if _CONFIG_CHANGED:
+        check_config_dir()
+    return _CONFIG
 
 
 FUNCNODES_RENDER_OPTIONS: RenderOptions = {"typemap": {}, "inputconverter": {}}
@@ -203,50 +237,36 @@ def update_render_options(options: RenderOptions):
 
 
 def reload(funcnodes_config_dir: Optional[Path] = None):
-    global CONFIG, BASE_CONFIG_DIR, CONFIG_DIR
+    global _CONFIG, _BASE_CONFIG_DIR, _CONFIG_DIR
     load_dotenv(override=True)
 
     if funcnodes_config_dir is not None:
         os.environ["FUNCNODES_CONFIG_DIR"] = str(Path(funcnodes_config_dir))
 
-    BASE_CONFIG_DIR = Path(
+    _BASE_CONFIG_DIR = Path(
         os.environ.get("FUNCNODES_CONFIG_DIR", Path.home() / ".funcnodes")
     )
-    CONFIG = DEFAULT_CONFIG
-    CONFIG_DIR = BASE_CONFIG_DIR
+    _CONFIG = DEFAULT_CONFIG
+    _CONFIG_DIR = _BASE_CONFIG_DIR
     check_config_dir()
 
 
 reload()
+_IN_NODE_TEST = False
 
 IN_NODE_TEST = False
 
 
-class This(sys.__class__):  # sys.__class__ is <class 'module'>
-    _IN_NODE_TEST = IN_NODE_TEST
-
-    @property
-    def IN_NODE_TEST(self):  # do the property things in this class
-        return self._IN_NODE_TEST
-
-    @IN_NODE_TEST.setter
-    def IN_NODE_TEST(self, value):  # setter is also OK
-        value = bool(value)
-        # if value is the same as the current value, do nothing
-        if value == self._IN_NODE_TEST:
-            return
-        if value:
-            set_in_test()
-        self._IN_NODE_TEST = value
-
-
-del IN_NODE_TEST
-
-sys.modules[__name__].__class__ = This  # set the __class__ of the module to This
+def get_in_test() -> bool:
+    return _IN_NODE_TEST
 
 
 def set_in_test(
-    clear: bool = True, add_pid: bool = True, config: Optional[ConfigType] = None
+    in_test: Literal[True] = True,
+    clear: bool = True,
+    add_pid: bool = True,
+    config: Optional[ConfigType] = None,
+    fail_on_warnings: Optional[List[Warning]] = None,
 ):
     """
     Sets the configuration to be in test mode.
@@ -257,29 +277,80 @@ def set_in_test(
     Examples:
       >>> set_in_test()
     """
-    global BASE_CONFIG_DIR
-    sys.modules[__name__]._IN_NODE_TEST = True
+    global _BASE_CONFIG_DIR, _IN_NODE_TEST
+    in_test = bool(in_test)
+    if not in_test:
+        raise ValueError("Cannot set in test to False.")
+    if in_test == _IN_NODE_TEST:  # no change
+        return
+    _IN_NODE_TEST = True
+
+    if fail_on_warnings is None:
+        fail_on_warnings = [FuncNodesDeprecationWarning]
+    if fail_on_warnings and not sys.warnoptions:
+        if not isinstance(fail_on_warnings, list):
+            try:
+                fail_on_warnings = list(fail_on_warnings)
+            except Exception:
+                fail_on_warnings = [fail_on_warnings]
+
+        for w in fail_on_warnings:
+            warnings.simplefilter("error", DeprecationWarning)
 
     fn = "funcnodes_test"
     if add_pid:
         fn += f"_{os.getpid()}"
 
-    BASE_CONFIG_DIR = Path(tempfile.gettempdir()) / fn
+    _BASE_CONFIG_DIR = Path(tempfile.gettempdir()) / fn
     if clear:
-        if BASE_CONFIG_DIR.exists():
+        if _BASE_CONFIG_DIR.exists():
             try:
-                shutil.rmtree(BASE_CONFIG_DIR)
+                shutil.rmtree(_BASE_CONFIG_DIR)
             except Exception:
                 pass
     if config:
-        write_config(BASE_CONFIG_DIR / "config.json", config)
+        write_config(_BASE_CONFIG_DIR / "config.json", config)
     check_config_dir()
 
     # import here to avoid circular import
 
     from ._logging import set_logging_dir  # noqa C0415 # pylint: disable=import-outside-toplevel
 
-    set_logging_dir(os.path.join(BASE_CONFIG_DIR, "logs"))
+    set_logging_dir(os.path.join(_BASE_CONFIG_DIR, "logs"))
 
 
-sys.modules[__name__].IN_NODE_TEST = bool(os.environ.get("IN_NODE_TEST", False))
+CONFIG = path_module_attribute_to_getter(
+    __name__,
+    "CONFIG",
+    get_config,
+    None,
+)
+
+
+CONFIG_DIR = path_module_attribute_to_getter(
+    __name__,
+    "CONFIG_DIR",
+    get_config_dir,
+    None,
+)
+
+
+@method_deprecated_decorator()
+def get_base_config_dir() -> Path:
+    return _BASE_CONFIG_DIR
+
+
+BASE_CONFIG_DIR = path_module_attribute_to_getter(
+    __name__,
+    "BASE_CONFIG_DIR",
+    get_base_config_dir,
+    None,
+)
+
+
+IN_NODE_TEST = path_module_attribute_to_getter(
+    __name__, "IN_NODE_TEST", get_in_test, set_in_test
+)
+
+if bool(os.environ.get("IN_NODE_TEST", False)):
+    set_in_test()

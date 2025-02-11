@@ -9,6 +9,10 @@ from funcnodes_core import (
 import json
 from funcnodes_core.io import raise_allow_connections, NodeAlreadyDefinedError, NoValue
 
+import funcnodes_core as fn
+
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+
 
 class TestNodeIO(unittest.TestCase):
     def setUp(self):

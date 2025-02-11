@@ -2,6 +2,10 @@ import unittest
 from funcnodes_core import NodeSpace, Node, NodeInput, NodeOutput, Shelf
 import gc
 
+import funcnodes_core as fn
+
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+
 
 class DummyNode(Node):
     node_id = "ns_dummy_node"
