@@ -11,6 +11,9 @@ import funcnodes_core as fn
 import time
 
 
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+
+
 def sync_function(x: int) -> int:
     """
     A synchronous function that multiplies the input by 2.

@@ -11,6 +11,10 @@ from funcnodes_core.nodemaker import (
 from funcnodes_core import get_nodeclass
 import asyncio
 
+import funcnodes_core as fn
+
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+
 
 class TestNodeClassMaker(unittest.IsolatedAsyncioTestCase):
     """

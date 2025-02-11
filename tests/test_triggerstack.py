@@ -3,7 +3,10 @@ import unittest
 from funcnodes_core.triggerstack import TriggerStack  # Replace with your actual import
 from funcnodes_core import NodeDecorator, config, NodeTriggerError
 
-config.IN_NODE_TEST = True
+
+import funcnodes_core as fn
+
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
 
 
 class TestTriggerStack(unittest.IsolatedAsyncioTestCase):
@@ -148,11 +151,11 @@ class TestTriggerStack(unittest.IsolatedAsyncioTestCase):
         ins = prunetofial()
         with self.assertRaises(NodeTriggerError):
             await ins
-
-        config.IN_NODE_TEST = False
+        o_IN_NODE_TEST = config._IN_NODE_TEST
+        config._IN_NODE_TEST = False
         await ins
 
-        config.IN_NODE_TEST = True
+        config._IN_NODE_TEST = o_IN_NODE_TEST
 
         with self.assertRaises(NodeTriggerError):
             await ins

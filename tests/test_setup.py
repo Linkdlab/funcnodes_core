@@ -2,7 +2,11 @@ from types import ModuleType
 import unittest
 import funcnodes_core as fnc
 from importlib import reload
-import funcnodes_basic
+
+import funcnodes_core as fn
+
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+import funcnodes_basic  # noqa # pylint: disable=unused-import
 
 
 class TestSetup(unittest.TestCase):

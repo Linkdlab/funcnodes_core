@@ -1,11 +1,11 @@
 from typing import Optional
 import logging
 from logging.handlers import RotatingFileHandler
-from .config import CONFIG_DIR
+from .config import _CONFIG_DIR
 from pathlib import Path
 import os
 
-LOGGINGDIR = CONFIG_DIR / "logs"
+LOGGINGDIR = _CONFIG_DIR / "logs"
 if not LOGGINGDIR.exists():
     LOGGINGDIR.mkdir(parents=True)
 

@@ -13,6 +13,10 @@ from funcnodes_core.lib import (
 )
 import gc
 
+import funcnodes_core as fn
+
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+
 
 @NodeDecorator("test_lib_testfunc")
 def testfunc(int: int, str: str) -> str:
