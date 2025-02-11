@@ -62,8 +62,13 @@ def path_module_attribute_to_getter(
             # Delegate the setting to the true setter function.
             return true_setter(value)
 
-        # Update the property to include the setter.
-        attrs[attribute] = attrs[attribute].setter(_inplace_setter)
+    else:
+        # If no setter is provided, use a default setter that raises an error.
+        def _inplace_setter(self, value):
+            raise AttributeError(f"Attribute {attribute} is read-only.")
+
+    # Update the property to include the setter.
+    attrs[attribute] = attrs[attribute].setter(_inplace_setter)
 
     # Create a new type (class) that will be used to replace the module's __class__.
     # This new class inherits from the module's original class and includes our new property.
