@@ -56,7 +56,7 @@ DEFAULT_CONFIG: ConfigType = {
 
 _CONFIG = DEFAULT_CONFIG
 _CONFIG_DIR = _BASE_CONFIG_DIR
-_CONFIG_CHANGED = True
+_CONFIG_CHANGED = None
 
 
 def _bupath(path: Path) -> Path:
@@ -180,7 +180,7 @@ def get_config() -> ConfigType:
       >>> get_config()
     """
     if _CONFIG_CHANGED:
-        check_config_dir()
+        reload()
     return _CONFIG
 
 
@@ -251,7 +251,6 @@ def reload(funcnodes_config_dir: Optional[Path] = None):
     check_config_dir()
 
 
-reload()
 _IN_NODE_TEST = False
 
 IN_NODE_TEST = False
@@ -263,6 +262,7 @@ def get_in_test() -> bool:
 
 def set_in_test(
     in_test: Literal[True] = True,
+    *,
     clear: bool = True,
     add_pid: bool = True,
     config: Optional[ConfigType] = None,
@@ -277,46 +277,49 @@ def set_in_test(
     Examples:
       >>> set_in_test()
     """
-    global _BASE_CONFIG_DIR, _IN_NODE_TEST
-    in_test = bool(in_test)
-    if not in_test:
-        raise ValueError("Cannot set in test to False.")
-    if in_test == _IN_NODE_TEST:  # no change
-        return
-    _IN_NODE_TEST = True
+    try:
+        global _BASE_CONFIG_DIR, _IN_NODE_TEST, _CONFIG_CHANGED
+        in_test = bool(in_test)
+        if not in_test:
+            raise ValueError("Cannot set in test to False.")
+        if in_test == _IN_NODE_TEST:  # no change
+            return
+        _IN_NODE_TEST = True
 
-    if fail_on_warnings is None:
-        fail_on_warnings = [FuncNodesDeprecationWarning]
-    if fail_on_warnings and not sys.warnoptions:
-        if not isinstance(fail_on_warnings, list):
-            try:
-                fail_on_warnings = list(fail_on_warnings)
-            except Exception:
-                fail_on_warnings = [fail_on_warnings]
+        if fail_on_warnings is None:
+            fail_on_warnings = [FuncNodesDeprecationWarning]
+        if fail_on_warnings and not sys.warnoptions:
+            if not isinstance(fail_on_warnings, list):
+                try:
+                    fail_on_warnings = list(fail_on_warnings)
+                except Exception:
+                    fail_on_warnings = [fail_on_warnings]
 
-        for w in fail_on_warnings:
-            warnings.simplefilter("error", DeprecationWarning)
+            for w in fail_on_warnings:
+                warnings.simplefilter("error", DeprecationWarning)
 
-    fn = "funcnodes_test"
-    if add_pid:
-        fn += f"_{os.getpid()}"
+        fn = "funcnodes_test"
+        if add_pid:
+            fn += f"_{os.getpid()}"
 
-    _BASE_CONFIG_DIR = Path(tempfile.gettempdir()) / fn
-    if clear:
-        if _BASE_CONFIG_DIR.exists():
-            try:
-                shutil.rmtree(_BASE_CONFIG_DIR)
-            except Exception:
-                pass
-    if config:
-        write_config(_BASE_CONFIG_DIR / "config.json", config)
-    check_config_dir()
+        _BASE_CONFIG_DIR = Path(tempfile.gettempdir()) / fn
+        if clear:
+            if _BASE_CONFIG_DIR.exists():
+                try:
+                    shutil.rmtree(_BASE_CONFIG_DIR)
+                except Exception:
+                    pass
+        if config:
+            write_config(_BASE_CONFIG_DIR / "config.json", config)
+        reload(_BASE_CONFIG_DIR)
 
-    # import here to avoid circular import
+        # import here to avoid circular import
 
-    from ._logging import set_logging_dir  # noqa C0415 # pylint: disable=import-outside-toplevel
+        from ._logging import set_logging_dir  # noqa C0415 # pylint: disable=import-outside-toplevel
 
-    set_logging_dir(os.path.join(_BASE_CONFIG_DIR, "logs"))
+        set_logging_dir(os.path.join(_BASE_CONFIG_DIR, "logs"))
+    finally:
+        _CONFIG_CHANGED = True  # we change this to true, that the config is reloaded
 
 
 CONFIG = path_module_attribute_to_getter(
@@ -354,3 +357,4 @@ IN_NODE_TEST = path_module_attribute_to_getter(
 
 if bool(os.environ.get("IN_NODE_TEST", False)):
     set_in_test()
+_CONFIG_CHANGED = True
