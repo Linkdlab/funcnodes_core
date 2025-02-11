@@ -56,6 +56,7 @@ DEFAULT_CONFIG: ConfigType = {
 
 _CONFIG = DEFAULT_CONFIG
 _CONFIG_DIR = _BASE_CONFIG_DIR
+_CONFIG_CHANGED = True
 
 
 def _bupath(path: Path) -> Path:
@@ -142,7 +143,7 @@ def check_config_dir():
     Examples:
       >>> check_config_dir()
     """
-    global _CONFIG_DIR
+    global _CONFIG_DIR, _CONFIG_CHANGED
     if not _BASE_CONFIG_DIR.exists():
         _BASE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     load_config(_BASE_CONFIG_DIR / "config.json")
@@ -151,6 +152,8 @@ def check_config_dir():
         _CONFIG_DIR = _CONFIG["custom_config_dir"]
     else:
         _CONFIG_DIR = _BASE_CONFIG_DIR
+
+    _CONFIG_CHANGED = False
 
 
 def get_config_dir() -> Path:
@@ -176,7 +179,8 @@ def get_config() -> ConfigType:
     Examples:
       >>> get_config()
     """
-    check_config_dir()
+    if _CONFIG_CHANGED:
+        check_config_dir()
     return _CONFIG
 
 
