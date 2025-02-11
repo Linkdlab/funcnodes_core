@@ -9,4 +9,7 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(fn.config.IN_NODE_TEST)
         self.assertTrue(fn.config.This.IN_NODE_TEST)
-        self.assertEqual(os.path.basename(fn.config.BASE_CONFIG_DIR), "funcnodes_test")
+        pid = os.getpid()
+        self.assertEqual(
+            os.path.basename(fn.config.BASE_CONFIG_DIR), "funcnodes_test" + f"_{pid}"
+        )

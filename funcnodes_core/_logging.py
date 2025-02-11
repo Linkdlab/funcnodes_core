@@ -2,11 +2,12 @@ from typing import Optional
 import logging
 from logging.handlers import RotatingFileHandler
 from .config import CONFIG_DIR
+from pathlib import Path
 import os
 
-LOGGINGDIR = os.path.join(CONFIG_DIR, "logs")
-if not os.path.exists(LOGGINGDIR):
-    os.makedirs(LOGGINGDIR)
+LOGGINGDIR = CONFIG_DIR / "logs"
+if not LOGGINGDIR.exists():
+    LOGGINGDIR.mkdir(parents=True)
 
 DEFAULT_MAX_FORMAT_LENGTH = os.environ.get("FUNCNODES_LOG_MAX_FORMAT_LENGTH", 5000)
 DEFAULT_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -57,7 +58,7 @@ _formatter = NotTooLongStringFormatter(
 # Add the handler to the logger
 
 
-def _overwrite_add_handler(logger):
+def _overwrite_add_handler(logger: logging.Logger):
     """
     Overwrites the addHandler method of the given logger to ensure handlers are added with a formatter
     and prevent duplicate handlers from being added.
@@ -136,7 +137,7 @@ def getChildren(logger: logging.Logger):
     return children
 
 
-def _update_logger_handlers(logger: logging.Logger, prev_dir=None):
+def _update_logger_handlers(logger: logging.Logger, prev_dir: Optional[Path] = None):
     """
     Updates the handlers for the given logger, ensuring it has a StreamHandler and a RotatingFileHandler.
     The log files are stored in the logs directory, and the log formatting is set correctly.
@@ -153,6 +154,7 @@ def _update_logger_handlers(logger: logging.Logger, prev_dir=None):
     """
     if prev_dir is None:
         prev_dir = LOGGINGDIR
+    prev_dir = Path(prev_dir)
     has_stream_handler = False
     for hdlr in list(logger.handlers):
         if isinstance(hdlr, logging.StreamHandler):
@@ -160,7 +162,7 @@ def _update_logger_handlers(logger: logging.Logger, prev_dir=None):
             hdlr.setFormatter(_formatter)
 
         if isinstance(hdlr, RotatingFileHandler):
-            if hdlr.baseFilename == os.path.join(prev_dir, f"{logger.name}.log"):
+            if hdlr.baseFilename == prev_dir / f"{logger.name}.log":
                 hdlr.close()
                 logger.removeHandler(hdlr)
                 continue
@@ -174,7 +176,7 @@ def _update_logger_handlers(logger: logging.Logger, prev_dir=None):
         logger.addHandler(ch)
 
     fh = RotatingFileHandler(
-        os.path.join(LOGGINGDIR, f"{logger.name}.log"),
+        LOGGINGDIR / f"{logger.name}.log",
         maxBytes=1024 * 1024 * 5,
         backupCount=5,
     )
@@ -186,7 +188,7 @@ def _update_logger_handlers(logger: logging.Logger, prev_dir=None):
         _update_logger_handlers(child, prev_dir=prev_dir)
 
 
-def get_logger(name, propagate=True):
+def get_logger(name: str, propagate: bool = True):
     """
     Returns a logger with the given name as a child of FUNCNODES_LOGGER,
     and ensures the logger is set up with appropriate handlers.
@@ -209,7 +211,7 @@ def get_logger(name, propagate=True):
     return sublogger
 
 
-def set_logging_dir(path):
+def set_logging_dir(path: Path):
     """
     Sets a custom directory path for storing log files. If the directory does not exist, it will be created.
     After updating the directory, the logger's handlers will be updated accordingly.
@@ -225,9 +227,9 @@ def set_logging_dir(path):
     """
     global LOGGINGDIR
     prev_dir = LOGGINGDIR
-    LOGGINGDIR = path
-    if not os.path.exists(path):
-        os.makedirs(path)
+    LOGGINGDIR = Path(path)
+    if not LOGGINGDIR.exists():
+        LOGGINGDIR.mkdir(parents=True)
     _update_logger_handlers(FUNCNODES_LOGGER, prev_dir=prev_dir)
 
 
