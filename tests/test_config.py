@@ -33,3 +33,12 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
         # make sure no deprecation warning is issued when accessing the new attribute
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
+
+    def test_config_not_laoded(self):
+        import funcnodes_core as fn
+
+        fn.config.set_in_test()
+        self.assertTrue(
+            fn.config._CONFIG_CHANGED,
+            f"Expected {fn.config._CONFIG_CHANGED} to be True",
+        )
