@@ -6,9 +6,10 @@ from funcnodes_core.utils.nodeutils import (
 )
 
 from funcnodes_core.nodemaker import NodeDecorator
-from funcnodes_core import config
 
-config.IN_NODE_TEST = True
+import funcnodes_core as fn
+
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
 
 
 @NodeDecorator("dummy_nodefor testnodeutils")

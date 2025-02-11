@@ -3,6 +3,9 @@ import funcnodes_core as fn
 import gc
 
 
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+
+
 class TestNodeClassMixin(unittest.IsolatedAsyncioTestCase):
     async def test_nodeclassmixin_create_wo_id(self):
         with self.assertRaises(ValueError):

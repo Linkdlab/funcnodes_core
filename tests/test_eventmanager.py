@@ -9,6 +9,10 @@ from funcnodes_core.eventmanager import (
     emit_after,
 )
 
+import funcnodes_core as fn
+
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+
 
 class DummyObject:
     pass

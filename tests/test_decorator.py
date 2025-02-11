@@ -1,17 +1,11 @@
 import unittest
 import funcnodes_core as fn
 from typing import Tuple
-import sys
 import asyncio
 import time
 
-if not sys.warnoptions:
-    import warnings
 
-    warnings.simplefilter("error", DeprecationWarning)
-
-
-fn.config.IN_NODE_TEST = True
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
 
 
 class DummyNode(fn.Node):

@@ -15,6 +15,10 @@ from funcnodes_core.node import (
     get_nodeclass,
 )
 
+import funcnodes_core as fn
+
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+
 
 class DummyNode(Node):
     node_id = "dummy_node"

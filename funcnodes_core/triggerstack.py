@@ -32,7 +32,7 @@ class TriggerStack:
             t = self._stack.pop()
 
             # check if the task has an exception
-            if t.exception() and config.IN_NODE_TEST:
+            if t.exception() and config.get_in_test():
                 # if it does, raise the exception
                 raise t.exception()
 

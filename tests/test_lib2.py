@@ -5,6 +5,10 @@ import sys
 from funcnodes_core.nodemaker import NodeDecorator
 from funcnodes_core.lib import module_to_shelf, serialize_shelfe
 
+import funcnodes_core as fn
+
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+
 
 @NodeDecorator("test_lib_testfunc2")
 def testfunc(int: int, str: str) -> str:

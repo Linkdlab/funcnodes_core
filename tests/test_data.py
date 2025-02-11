@@ -2,6 +2,8 @@ import unittest
 
 import funcnodes_core as fn
 
+fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+
 
 class TestDataEnum(unittest.IsolatedAsyncioTestCase):
     def test_enum(self):
