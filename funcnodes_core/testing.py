@@ -4,6 +4,13 @@ Helper functions for testing.
 
 import logging
 
+from .config import set_in_test, get_in_test
+
+
+def setup():
+    if not get_in_test():
+        set_in_test()
+
 
 def teardown():
     """This can be called after each test, which will do a little cleanup."""
