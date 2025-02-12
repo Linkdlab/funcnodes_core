@@ -31,8 +31,6 @@ def path_module_attribute_to_getter(
     if isinstance(module, str):
         module = sys.modules[module]
 
-    print("pathing", module)
-
     # Define a getter that will be attached as a property.
     # When the deprecated attribute is accessed, this function is called.
     def _inplace_getter(self):
