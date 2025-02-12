@@ -3,6 +3,7 @@ import logging
 from io import StringIO
 
 from funcnodes_core import get_logger, set_log_format
+from funcnodes_core.testing import teardown
 
 
 class TestNotTooLongStringFormatter(unittest.TestCase):
@@ -15,6 +16,7 @@ class TestNotTooLongStringFormatter(unittest.TestCase):
         self.logger.addHandler(self.handler)
 
     def tearDown(self):
+        teardown()
         self.logger.removeHandler(self.handler)
         self.stream.close()
 
