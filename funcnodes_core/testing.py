@@ -4,6 +4,13 @@ Helper functions for testing.
 
 import logging
 
+from .config import set_in_test, get_in_test
+
+
+def setup():
+    if not get_in_test():
+        set_in_test()
+
 
 def teardown():
     """This can be called after each test, which will do a little cleanup."""
@@ -21,7 +28,9 @@ def teardown():
     loggers = [logging.getLogger(name) for name in loggers]
 
     for logger in loggers:
-        for handler in logger.handlers:
+        # handlers have to be accessed as a list,
+        # because they are removed during iteration
+        for handler in list(logger.handlers):
             logger.removeHandler(handler)
             handler.close()
 
