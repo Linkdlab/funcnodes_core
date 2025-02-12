@@ -28,7 +28,9 @@ def teardown():
     loggers = [logging.getLogger(name) for name in loggers]
 
     for logger in loggers:
-        for handler in logger.handlers:
+        # handlers have to be accessed as a list,
+        # because they are removed during iteration
+        for handler in list(logger.handlers):
             logger.removeHandler(handler)
             handler.close()
 
