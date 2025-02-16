@@ -2,7 +2,7 @@ from typing import Optional, TypedDict, Union, Dict, Any
 from collections.abc import Callable
 import asyncio
 from tqdm import tqdm
-from funcnodes_core.config import IN_NODE_TEST
+from funcnodes_core.utils.deprecations import method_deprecated_decorator
 
 
 class TqdmState(TypedDict):
@@ -80,9 +80,9 @@ class NodeTqdm(tqdm):
         self.broadcast_func = broadcast_func
         super().__init__(*args, **kwargs)
 
+    @method_deprecated_decorator()
     def reset(self, *args, **kwargs):
-        if IN_NODE_TEST:
-            raise Exception("NodeTqdm is.reset is deprecated")
+        pass
 
     def display(self, msg=None, pos=None):
         # This method is called by tqdm according to its internal logic,
