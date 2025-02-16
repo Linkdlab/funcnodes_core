@@ -338,7 +338,6 @@ CONFIG_DIR = path_module_attribute_to_getter(
 )
 
 
-@method_deprecated_decorator()
 def get_base_config_dir() -> Path:
     return _BASE_CONFIG_DIR
 
@@ -349,6 +348,9 @@ BASE_CONFIG_DIR = path_module_attribute_to_getter(
     get_base_config_dir,
     None,
 )
+
+# we need to decorate this later, as it would be called in BASE_CONFIG_DIR setter
+get_base_config_dir = method_deprecated_decorator()(get_base_config_dir)
 
 
 IN_NODE_TEST = path_module_attribute_to_getter(
