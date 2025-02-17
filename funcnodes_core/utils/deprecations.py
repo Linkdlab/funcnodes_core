@@ -38,6 +38,7 @@ def path_module_attribute_to_getter(
         warnings.warn(
             f"Attribute {attribute} is deprecated. Use {true_getter.__name__}() instead.",
             FuncNodesDeprecationWarning,
+            stacklevel=2,
         )
         # Return the value by calling the new (true) getter function.
         return true_getter()
@@ -56,6 +57,7 @@ def path_module_attribute_to_getter(
             warnings.warn(
                 f"Attribute {attribute} is deprecated. Use {true_setter.__name__}(value) instead.",
                 FuncNodesDeprecationWarning,
+                stacklevel=2,
             )
             # Delegate the setting to the true setter function.
             return true_setter(value)
@@ -95,6 +97,7 @@ def method_deprecated_decorator(alternative=None):
             warnings.warn(
                 warntext,
                 FuncNodesDeprecationWarning,
+                stacklevel=2,
             )
             return method(*args, **kwargs)
 
