@@ -352,6 +352,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         self._inputs: List[NodeInput] = []
         self._outputs: List[NodeOutput] = []
         self._triggerstack: Optional[TriggerStack] = None
+        # flag whether the trigger has started but still not read the ios
         self._trigger_open = False
         self._requests_trigger = False
         self.asynceventmanager = AsyncEventManager(self)
@@ -595,11 +596,14 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
 
     @property
     def in_trigger(self):
-        """Whether the node is currently in a trigger state."""
+        """Whether the node is currently in a trigger state.
+        checked if the triggerstack is not None and if it is done
+        or if the _trigger_open flag is set
+        """
         if self._triggerstack is not None:
             if self._triggerstack.done():
                 self._triggerstack = None
-        return self._triggerstack is not None
+        return self._triggerstack is not None or self._trigger_open
 
     @property
     def disabled(self) -> bool:
@@ -830,8 +834,12 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         async def _wrapped_func():
             """Wraps the node's function to handle the triggering of events before and after its execution."""
             # set the trigger event
+            # just in case we set the flag again, this is the last time before the trigger
+            # that inupts can be changed and be respected
+            self._trigger_open = True
             await self.asynceventmanager.set_and_clear("triggered")
             await asyncio.sleep(self._pretrigger_delay)
+            # no more changes please
             self._trigger_open = False
             self.emit("triggerstart")
 
@@ -892,6 +900,8 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         # if the node is ready to trigger, trigger it
         if self.ready_to_trigger():
             self.trigger()
+
+        # if the node is about to trigger, but still not read the ios
         elif self._trigger_open:
             return
         else:
@@ -957,8 +967,8 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         if triggerstack is None:
             triggerstack = TriggerStack()
         self._pretrigger_delay = 0.02  # 20ms
-        self._trigger_open = True
         triggerlogger.debug(f"triggering {self}")
+        self._trigger_open = True
         self._triggerstack = triggerstack
         self._triggerstack.append(self())
         self._requests_trigger = False
