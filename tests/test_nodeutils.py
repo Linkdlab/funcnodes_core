@@ -1,5 +1,5 @@
 import unittest
-
+import time
 from funcnodes_core.utils.nodeutils import (
     get_deep_connected_nodeset,
     run_until_complete,
@@ -15,6 +15,21 @@ fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
 @NodeDecorator("dummy_nodefor testnodeutils")
 def identity(input: int) -> int:
     return input
+
+
+class TKNode(fn.Node):
+    node_id = "tknode"
+    ip1 = fn.NodeInput(uuid="ip1", type=int)
+    ip2 = fn.NodeInput(uuid="ip2", type=int)
+
+    op1 = fn.NodeOutput(uuid="op1", type=int)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.outputs["op1"].value = 0
+
+    async def func(self, ip1, ip2):
+        self.outputs["op1"].value += 1
 
 
 class TestNodeUtils(unittest.IsolatedAsyncioTestCase):
@@ -82,3 +97,74 @@ class TestNodeUtils(unittest.IsolatedAsyncioTestCase):
             "idle",
             "The prefix should be 'idle'.",
         )
+
+    async def test_trigger_conut(self):
+        node = TKNode(pretrigger_delay=0.1)
+        await node
+        self.assertEqual(node.outputs["op1"].value, 0)
+        node.inputs["ip1"].value = 1
+        node.inputs["ip2"].value = 2
+        await node
+        self.assertEqual(node.outputs["op1"].value, 1)
+
+        import asyncio
+
+        ts1 = time.time()
+
+        for i in range(10):
+            await node
+        te1 = time.time()
+        tw1 = te1 - ts1
+        self.assertLess(tw1, 2)
+        self.assertEqual(node.outputs["op1"].value, 11)
+
+        ts2 = time.time()
+        for i in range(10):
+            node.inputs["ip1"].value = i
+            await node
+        te2 = time.time()
+        tw2 = te2 - ts2
+        self.assertEqual(node.outputs["op1"].value, 21)
+        self.assertLess(tw2, 2)
+
+        while node.in_trigger:
+            await asyncio.sleep(0.0)
+
+        pt = node.outputs["op1"].value
+        node.inputs["ip1"].value = pt
+        ts3 = time.time()
+        while node.in_trigger:
+            await asyncio.sleep(0.01)
+        te3 = time.time()
+
+        tw3 = te3 - ts3
+        self.assertLess(tw3, 0.2)
+        self.assertEqual(node.outputs["op1"].value, 22)
+
+        node.inputs["ip1"].value = 10
+        await asyncio.sleep(0.2)  # the delay is large, trigger twice
+        node.inputs["ip2"].value = 20
+        await node
+        self.assertEqual(node.outputs["op1"].value, 24)
+
+        node.inputs["ip1"].value = 11
+        await asyncio.sleep(0.05)  # the delay is small, trigger once
+        node.inputs["ip2"].value = 21
+        await node
+        self.assertEqual(node.outputs["op1"].value, 25)
+
+    async def test_trigger_fast(self):
+        node = TKNode()
+        node.pretrigger_delay = 0.0
+        node.inputs["ip1"].value = 1
+        node.inputs["ip2"].value = 2
+        await node
+        self.assertEqual(node.outputs["op1"].value, 1)
+
+        ts1 = time.time()
+        for i in range(100):
+            await node
+        te1 = time.time()
+        tw1 = te1 - ts1
+        self.assertLess(tw1, 0.5)
+        self.assertEqual(node.outputs["op1"].value, 101)

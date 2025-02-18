@@ -50,6 +50,7 @@ from .utils.data import (
 from .utils.nodeutils import run_until_complete
 from .utils.nodetqdm import NodeTqdm, TqdmState, tqdm
 from funcnodes_core._logging import get_logger, FUNCNODES_LOGGER
+from .config import get_config
 
 if TYPE_CHECKING:
     from .nodespace import NodeSpace
@@ -300,6 +301,10 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
     default_io_options: Dict[str, NodeInputOptions | NodeOutputOptions] = {}
     default_trigger_on_create: bool = True
 
+    default_pretrigger_delay = float(
+        get_config()["nodes"]["default_pretrigger_delay"]
+    )  # 10ms
+
     triggerinput = NodeInput(
         id="_triggerinput",
         name="( )",
@@ -347,11 +352,13 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         render_options: Optional[RenderOptions] = None,
         io_options: Optional[Dict[str, NodeInputOptions | NodeOutputOptions]] = None,
         trigger_on_create: Optional[bool] = None,
+        pretrigger_delay: Optional[float] = None,
     ):
         super().__init__()
         self._inputs: List[NodeInput] = []
         self._outputs: List[NodeOutput] = []
         self._triggerstack: Optional[TriggerStack] = None
+        # flag whether the trigger has started but still not read the ios
         self._trigger_open = False
         self._requests_trigger = False
         self.asynceventmanager = AsyncEventManager(self)
@@ -359,6 +366,11 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             uuid = id
         self._uuid = uuid or uuid4().hex
         self._reset_inputs_on_trigger = reset_inputs_on_trigger
+        self._pretrigger_delay = (
+            float(pretrigger_delay)
+            if pretrigger_delay is not None and float(pretrigger_delay) >= 0
+            else float(self.default_pretrigger_delay)
+        )
         self._name = name or f"{self.__class__.__name__}({self.uuid})"
         self._render_options = deep_fill_dict(
             render_options or RenderOptions(),  # type: ignore
@@ -382,6 +394,19 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         if self.trigger_on_create:
             if self.ready_to_trigger():
                 self.request_trigger()
+
+    @property
+    def pretrigger_delay(self):
+        return self._pretrigger_delay
+
+    @pretrigger_delay.setter
+    def pretrigger_delay(self, value: float):
+        if value is None:
+            value = self.default_pretrigger_delay
+        value = float(value)
+        if value < 0:
+            raise ValueError("Pretrigger delay cannot be negative")
+        self._pretrigger_delay = value
 
     @property
     def progress(self) -> Type[tqdm]:
@@ -595,11 +620,14 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
 
     @property
     def in_trigger(self):
-        """Whether the node is currently in a trigger state."""
+        """Whether the node is currently in a trigger state.
+        checked if the triggerstack is not None and if it is done
+        or if the _trigger_open flag is set
+        """
         if self._triggerstack is not None:
             if self._triggerstack.done():
                 self._triggerstack = None
-        return self._triggerstack is not None
+        return self._triggerstack is not None or self._trigger_open
 
     @property
     def disabled(self) -> bool:
@@ -830,20 +858,24 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         async def _wrapped_func():
             """Wraps the node's function to handle the triggering of events before and after its execution."""
             # set the trigger event
-            await self.asynceventmanager.set_and_clear("triggered")
-            await asyncio.sleep(self._pretrigger_delay)
-            self._trigger_open = False
-            self.emit("triggerstart")
+            # just in case we set the flag again, this is the last time before the trigger
+            # that inupts can be changed and be respected
+            self._trigger_open = True
+            with self.progress(total=None, desc="triggering") as pbar:
+                await self.asynceventmanager.set_and_clear("triggered")
+                self.emit("triggerstart")
+                await asyncio.sleep(self._pretrigger_delay)
+                # no more changes please
+                self._trigger_open = False
 
-            kwargs = {
-                ip.uuid: ip.value for ip in self._inputs if ip.value is not NoValue
-            }
+                kwargs = {
+                    ip.uuid: ip.value for ip in self._inputs if ip.value is not NoValue
+                }
 
-            err = None
-            if "_triggerinput" in kwargs:
-                del kwargs["_triggerinput"]
-            try:
-                with self.progress(total=None, desc="triggering") as pbar:
+                err = None
+                if "_triggerinput" in kwargs:
+                    del kwargs["_triggerinput"]
+                try:
                     # run the function
                     ans = await self.func(**kwargs)
                     # reset the inputs if requested
@@ -852,8 +884,8 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
                             ip.set_value(ip.default, does_trigger=False)
                     # pbar.update(1)
                     pbar.set_description_str("idle", refresh=False)
-            except Exception as e:
-                err = e
+                except Exception as e:
+                    err = e
 
             self.emit("triggerdone")
 
@@ -892,6 +924,8 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         # if the node is ready to trigger, trigger it
         if self.ready_to_trigger():
             self.trigger()
+
+        # if the node is about to trigger, but still not read the ios
         elif self._trigger_open:
             return
         else:
@@ -956,9 +990,9 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             raise InTriggerError("Node is already in trigger")
         if triggerstack is None:
             triggerstack = TriggerStack()
-        self._pretrigger_delay = 0.02  # 20ms
-        self._trigger_open = True
+
         triggerlogger.debug(f"triggering {self}")
+        self._trigger_open = True
         self._triggerstack = triggerstack
         self._triggerstack.append(self())
         self._requests_trigger = False

@@ -35,10 +35,15 @@ class FrontendConfig(TypedDict, total=False):
     host: str
 
 
+class NodesConfig(TypedDict, total=False):
+    default_pretrigger_delay: float
+
+
 class ConfigType(TypedDict, total=False):
     env_dir: str
     worker_manager: WorkerManagerConfig
     frontend: FrontendConfig
+    nodes: NodesConfig
 
 
 DEFAULT_CONFIG: ConfigType = {
@@ -50,6 +55,11 @@ DEFAULT_CONFIG: ConfigType = {
     "frontend": {
         "port": 8000,
         "host": "localhost",
+    },
+    "nodes": {
+        "default_pretrigger_delay": float(
+            os.environ.get("FUNCNODES_DEFAULT_PRETRIGGER_DELAY", 0.01)
+        ),
     },
 }
 
