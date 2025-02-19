@@ -127,8 +127,7 @@ def write_config(path: Path, config: ConfigType):
       >>> write_config("config.json", {"env_dir": "env"})
     """
     path = Path(path)
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.mkdir(parents=True, exist_ok=True)
     write_json_secure(config, path, indent=2)
     write_json_secure(config, _bupath(path), indent=2)
 
@@ -181,8 +180,7 @@ def check_config_dir():
       >>> check_config_dir()
     """
     global _CONFIG_DIR, _CONFIG_CHANGED
-    if not _BASE_CONFIG_DIR.exists():
-        _BASE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    _BASE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     load_config(_BASE_CONFIG_DIR / "config.json")
     if "custom_config_dir" in _CONFIG:
         load_config(Path(_CONFIG["custom_config_dir"]) / "config.json")
