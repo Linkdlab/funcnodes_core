@@ -57,15 +57,18 @@ class TestFuncnodesLogger(unittest.TestCase):
         teardown()
 
     def test_handler(self):
-        from funcnodes_core import FUNCNODES_LOGGER
+        from funcnodes_core import FUNCNODES_LOGGER, config
 
         handler_names = []
+        self.assertEqual(
+            len(FUNCNODES_LOGGER.handlers), 1, config.get_config().get("logging", {})
+        )
         for handler in FUNCNODES_LOGGER.handlers:
             handler_names.append(handler.name)
         self.assertEqual(handler_names, ["console"])
 
     def test_patch(self):
-        from funcnodes_core.config import get_config_dir, update_config, get_config
+        from funcnodes_core.config import get_config_dir, update_config
         from tempfile import gettempdir
         from funcnodes_core import FUNCNODES_LOGGER
         from funcnodes_core._logging import _update_logger_handlers
@@ -74,10 +77,6 @@ class TestFuncnodesLogger(unittest.TestCase):
 
         update_config({"logging": {"handler": {"console": False}}})
         _update_logger_handlers(FUNCNODES_LOGGER)
-
-        import pprint
-
-        pprint.pprint(get_config())
 
         handler_names = []
         for handler in FUNCNODES_LOGGER.handlers:
