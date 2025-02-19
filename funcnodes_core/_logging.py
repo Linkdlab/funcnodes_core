@@ -3,7 +3,7 @@ from typing import Optional
 import logging
 
 
-from .utils.plugins import resolve
+from .utils.modules import resolve
 from .config import _CONFIG_DIR, get_config
 from pathlib import Path
 import os
