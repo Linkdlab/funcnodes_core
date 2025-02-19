@@ -9,5 +9,10 @@ class TestTesting(TestCase):
 
     def test_teardown(self):
         self.assertGreaterEqual(len(FUNCNODES_LOGGER.handlers), 0)
+        for handler in FUNCNODES_LOGGER.handlers:
+            self.assertFalse(handler._closed)
         testing.teardown()
-        self.assertEqual(len(FUNCNODES_LOGGER.handlers), 0)
+        # check all handler are closed
+
+        for handler in FUNCNODES_LOGGER.handlers:
+            self.assertTrue(handler._closed)

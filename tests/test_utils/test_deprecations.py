@@ -23,7 +23,7 @@ class TestDeprecations(TestCase):
                 self._CONFIG = value
 
         pseudomodule = Pseudomodle()
-        pseudomodule.CONFIG = path_module_attribute_to_getter(
+        path_module_attribute_to_getter(
             pseudomodule, "CONFIG", pseudomodule.get_config, pseudomodule.set_config
         )
 
