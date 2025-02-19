@@ -184,8 +184,9 @@ def _update_logger_handlers(
         found.add(hdlr.name)
 
     for name, data in handler_config.items():
-        if not data:
+        if data is False:
             continue
+
         if name not in found:
             classstring = data["handlerclass"]
             cls = resolve(classstring)
@@ -196,36 +197,6 @@ def _update_logger_handlers(
             hdlr.name = name
             hdlr.setFormatter(_formatter)
             logger.addHandler(hdlr)
-
-    # has_stream_handler = False
-    # for hdlr in list(logger.handlers):
-    #     if isinstance(hdlr, logging.StreamHandler):
-    #         has_stream_handler = True
-    #         hdlr.setFormatter(_formatter)
-
-    #     if isinstance(hdlr, RotatingFileHandler):
-    #         if hdlr.baseFilename == prev_dir / f"{logger.name}.log":
-    #             hdlr.close()
-    #             logger.removeHandler(hdlr)
-    #             continue
-
-    #     elif isinstance(hdlr, logging.Handler):
-    #         hdlr.setFormatter(_formatter)
-
-    # if not has_stream_handler:
-    #     ch = logging.StreamHandler()
-    #     ch.setFormatter(_formatter)
-    #     logger.addHandler(ch)
-
-    # fh = RotatingFileHandler(
-    #     LOGGINGDIR / f"{logger.name}.log",
-    #     maxBytes=1024 * 1024 * 5,
-    #     backupCount=5,
-    # )
-    # fh.setFormatter(_formatter)
-    # logger.addHandler(fh)
-
-    # get child loggers
     for child in getChildren(logger):
         _update_logger_handlers(
             child,
