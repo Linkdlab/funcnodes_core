@@ -12,7 +12,7 @@ LOGGINGDIR = _CONFIG_DIR / "logs"
 if not LOGGINGDIR.exists():
     LOGGINGDIR.mkdir(parents=True)
 
-DEFAULT_MAX_FORMAT_LENGTH = os.environ.get("FUNCNODES_LOG_MAX_FORMAT_LENGTH", 5000)
+DEFAULT_MAX_FORMAT_LENGTH = int(os.environ.get("FUNCNODES_LOG_MAX_FORMAT_LENGTH", 5000))
 DEFAULT_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 
@@ -131,7 +131,10 @@ def getChildren(logger: logging.Logger):
             if (
                 isinstance(item, logging.Logger)
                 and item.parent is logger
-                and _hierlevel(item) == 1 + _hierlevel(item.parent)
+                and _hierlevel(  # needed to chack the logger is really a direct child
+                    item
+                )
+                == 1 + _hierlevel(item.parent)
             ):
                 children.add(item)
         except Exception:
@@ -270,8 +273,7 @@ def set_logging_dir(path: Path):
     global LOGGINGDIR
     # prev_dir = LOGGINGDIR
     LOGGINGDIR = Path(path)
-    if not LOGGINGDIR.exists():
-        LOGGINGDIR.mkdir(parents=True)
+    LOGGINGDIR.mkdir(parents=True, exist_ok=True)
     _update_logger_handlers(
         FUNCNODES_LOGGER,
         #  prev_dir=prev_dir
