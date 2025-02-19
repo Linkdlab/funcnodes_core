@@ -1,3 +1,4 @@
+from pathlib import Path
 from .serialization import JSONEncoder, Encdata
 
 
@@ -20,3 +21,15 @@ def databytes_handler(obj, preview=False):
 
 
 JSONEncoder.add_encoder(databytes_handler, enc_cls=[databytes])
+
+
+def path_hander(obj, preview=False):
+    """
+    Encodes paths to strings.
+    """
+    if isinstance(obj, Path):
+        return Encdata(data=obj.as_posix(), handeled=True)
+    return Encdata(data=obj, handeled=False)
+
+
+JSONEncoder.add_encoder(path_hander)

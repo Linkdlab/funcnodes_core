@@ -1,8 +1,8 @@
-from typing import Optional, TypedDict, List, Literal
+from typing import Optional, TypedDict, List, Literal, Dict
 from pathlib import Path
 import os
 import json
-from .utils.data import deep_fill_dict
+from .utils.data import deep_fill_dict, deep_update_dict
 from .utils.plugins_types import RenderOptions
 from .utils.files import write_json_secure
 from dotenv import load_dotenv
@@ -39,11 +39,21 @@ class NodesConfig(TypedDict, total=False):
     default_pretrigger_delay: float
 
 
+class HandlerConfig(TypedDict, total=False):
+    handlerclass: str
+    options: dict
+
+
+class LoggingConfig(TypedDict, total=False):
+    handler: Dict[str, HandlerConfig]
+
+
 class ConfigType(TypedDict, total=False):
     env_dir: str
     worker_manager: WorkerManagerConfig
     frontend: FrontendConfig
     nodes: NodesConfig
+    logging: LoggingConfig
 
 
 DEFAULT_CONFIG: ConfigType = {
@@ -60,6 +70,21 @@ DEFAULT_CONFIG: ConfigType = {
         "default_pretrigger_delay": float(
             os.environ.get("FUNCNODES_DEFAULT_PRETRIGGER_DELAY", 0.01)
         ),
+    },
+    "logging": {
+        "handler": {
+            "console": {
+                "handlerclass": "logging.StreamHandler",
+                "options": {},
+            },
+            "file": {
+                "handlerclass": "logging.handlers.RotatingFileHandler",
+                "options": {
+                    "maxBytes": 1024 * 1024 * 5,
+                    "backupCount": 5,
+                },
+            },
+        },
     },
 }
 
@@ -102,6 +127,7 @@ def write_config(path: Path, config: ConfigType):
       >>> write_config("config.json", {"env_dir": "env"})
     """
     path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     write_json_secure(config, path, indent=2)
     write_json_secure(config, _bupath(path), indent=2)
 
@@ -154,8 +180,7 @@ def check_config_dir():
       >>> check_config_dir()
     """
     global _CONFIG_DIR, _CONFIG_CHANGED
-    if not _BASE_CONFIG_DIR.exists():
-        _BASE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    _BASE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     load_config(_BASE_CONFIG_DIR / "config.json")
     if "custom_config_dir" in _CONFIG:
         load_config(Path(_CONFIG["custom_config_dir"]) / "config.json")
@@ -192,6 +217,25 @@ def get_config() -> ConfigType:
     if _CONFIG_CHANGED:
         reload()
     return _CONFIG
+
+
+def update_config(config: ConfigType):
+    """
+    Updates the configuration.
+
+    Args:
+      config (dict): The configuration to update.
+
+    Returns:
+      None
+
+    Examples:
+      >>> update_config({"env_dir": "env"})
+    """
+    global _CONFIG
+    deep_update_dict(_CONFIG, config, inplace=True)
+    write_config(_CONFIG_DIR / "config.json", _CONFIG)
+    reload()
 
 
 FUNCNODES_RENDER_OPTIONS: RenderOptions = {"typemap": {}, "inputconverter": {}}
@@ -319,14 +363,17 @@ def set_in_test(
                     shutil.rmtree(_BASE_CONFIG_DIR)
                 except Exception:
                     pass
+
         if config:
             write_config(_BASE_CONFIG_DIR / "config.json", config)
+
         reload(_BASE_CONFIG_DIR)
 
+        update_config({"logging": {"handler": {"file": False}}})
         # import here to avoid circular import
+        from ._logging import FUNCNODES_LOGGER, _update_logger_handlers, set_logging_dir  # noqa C0415 # pylint: disable=import-outside-toplevel
 
-        from ._logging import set_logging_dir  # noqa C0415 # pylint: disable=import-outside-toplevel
-
+        _update_logger_handlers(FUNCNODES_LOGGER)
         set_logging_dir(os.path.join(_BASE_CONFIG_DIR, "logs"))
     finally:
         _CONFIG_CHANGED = True  # we change this to true, that the config is reloaded

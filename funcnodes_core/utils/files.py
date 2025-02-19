@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+from .serialization import JSONEncoder
 
 
 def write_json_secure(data, filepath, cls=None, **kwargs):
@@ -12,6 +13,8 @@ def write_json_secure(data, filepath, cls=None, **kwargs):
     """
     # Get the directory of the target file
     directory = os.path.dirname(filepath)
+
+    cls = cls or JSONEncoder
 
     # Create a temporary file in the same directory
     with tempfile.NamedTemporaryFile(

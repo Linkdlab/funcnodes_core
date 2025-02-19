@@ -1,5 +1,8 @@
-from typing import Any, MutableMapping, Dict, TypeVar
+from typing import Any, MutableMapping, Dict, TypeVar, Optional
 from copy import deepcopy
+import warnings
+
+from .deprecations import SpellingDeprecationWarning
 
 T = TypeVar("T", bound=MutableMapping[Any, Any])
 
@@ -10,7 +13,8 @@ def deep_fill_dict(
     overwrite_existing: bool = False,
     inplace: bool = True,
     merge_lists: bool = False,
-    unfify_lists: bool = False,
+    unify_lists: bool = False,
+    unfify_lists: Optional[bool] = None,
 ) -> T:
     """
     deep_fill_dict
@@ -33,6 +37,14 @@ def deep_fill_dict(
     Dict[Any, Any]
         The filled dict
     """
+
+    if unfify_lists is not None:
+        warnings.warn(
+            "unfify_lists is deprecated, use unify_lists instead.",
+            SpellingDeprecationWarning,
+        )
+        unify_lists = unfify_lists
+
     if not inplace:
         target_dict = deepcopy(target_dict)
 
@@ -52,17 +64,28 @@ def deep_fill_dict(
                 continue
         if overwrite_existing or (key not in target_dict):
             if (
-                isinstance(value, list)
+                merge_lists
+                and isinstance(value, list)
                 and isinstance(target_dict.get(key), list)
-                and merge_lists
             ):
                 target_dict[key].extend(value)
-                if unfify_lists:
+                if unify_lists:
                     target_dict[key] = list(set(target_dict[key]))
             else:
                 target_dict[key] = value
 
     return target_dict
+
+
+def deep_update_dict(target_dict: T, source_dict: T, inplace: bool = True) -> T:
+    return deep_fill_dict(
+        target_dict=target_dict,
+        source_dict=source_dict,
+        overwrite_existing=True,
+        inplace=inplace,
+        unify_lists=False,
+        merge_lists=False,
+    )
 
 
 def deep_remove_dict_on_equal(

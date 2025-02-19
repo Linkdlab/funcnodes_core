@@ -43,3 +43,45 @@ class TestNotTooLongStringFormatter(unittest.TestCase):
         self.assertIn("Exception occurred", output)
         self.assertIn("Traceback", output)
         self.assertIn("ValueError: An example exception with a lot of text.", output)
+
+
+class TestFuncnodesLogger(unittest.TestCase):
+    def setUp(self):
+        from funcnodes_core.testing import setup
+
+        setup()
+
+    def tearDown(self):
+        from funcnodes_core.testing import teardown
+
+        teardown()
+
+    def test_handler(self):
+        from funcnodes_core import FUNCNODES_LOGGER
+
+        handler_names = []
+        for handler in FUNCNODES_LOGGER.handlers:
+            handler_names.append(handler.name)
+        self.assertEqual(handler_names, ["console"])
+
+    def test_patch(self):
+        from funcnodes_core.config import get_config_dir, update_config, get_config
+        from tempfile import gettempdir
+        from funcnodes_core import FUNCNODES_LOGGER
+        from funcnodes_core._logging import _update_logger_handlers
+
+        self.assertTrue(get_config_dir().is_relative_to(gettempdir()), get_config_dir())
+
+        update_config({"logging": {"handler": {"console": False}}})
+        _update_logger_handlers(FUNCNODES_LOGGER)
+
+        import pprint
+
+        pprint.pprint(get_config())
+
+        handler_names = []
+        for handler in FUNCNODES_LOGGER.handlers:
+            handler_names.append(handler.name)
+        self.assertEqual(handler_names, [])
+
+        # _update_logger_handlers(FUNCNODES_LOGGER)
