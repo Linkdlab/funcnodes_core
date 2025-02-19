@@ -5,11 +5,14 @@ Helper functions for testing.
 import logging
 
 from .config import set_in_test, get_in_test
+from ._logging import FUNCNODES_LOGGER, _update_logger_handlers
 
 
 def setup():
     if not get_in_test():
         set_in_test()
+    logging.basicConfig(level=logging.DEBUG)
+    _update_logger_handlers(FUNCNODES_LOGGER)
 
 
 def teardown():
@@ -31,7 +34,6 @@ def teardown():
         # handlers have to be accessed as a list,
         # because they are removed during iteration
         for handler in list(logger.handlers):
-            logger.removeHandler(handler)
             handler.close()
 
     # remove all registered nodes
