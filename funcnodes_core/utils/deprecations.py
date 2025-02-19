@@ -17,6 +17,10 @@ class FuncNodesDeprecationWarning(DeprecationWarning):
     """A custom deprecation warning for FuncNodes, to distinguish from dependency warnings."""
 
 
+class SpellingDeprecationWarning(DeprecationWarning):
+    """A custom deprecation warning for spelling mistakes."""
+
+
 def path_module_attribute_to_getter(
     module: ModuleType,  # The module object (or module name) to modify.
     attribute: str,  # The name of the deprecated attribute.
