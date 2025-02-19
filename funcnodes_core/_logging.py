@@ -1,7 +1,10 @@
+import logging.config
 from typing import Optional
 import logging
-from logging.handlers import RotatingFileHandler
-from .config import _CONFIG_DIR
+
+
+from .utils.plugins import resolve
+from .config import _CONFIG_DIR, get_config
 from pathlib import Path
 import os
 
@@ -137,7 +140,10 @@ def getChildren(logger: logging.Logger):
     return children
 
 
-def _update_logger_handlers(logger: logging.Logger, prev_dir: Optional[Path] = None):
+def _update_logger_handlers(
+    logger: logging.Logger,
+    #  prev_dir: Optional[Path] = None
+):
     """
     Updates the handlers for the given logger, ensuring it has a StreamHandler and a RotatingFileHandler.
     The log files are stored in the logs directory, and the log formatting is set correctly.
@@ -152,40 +158,76 @@ def _update_logger_handlers(logger: logging.Logger, prev_dir: Optional[Path] = N
     Example:
       >>> _update_logger_handlers(FUNCNODES_LOGGER)
     """
-    if prev_dir is None:
-        prev_dir = LOGGINGDIR
-    prev_dir = Path(prev_dir)
-    has_stream_handler = False
+    # if prev_dir is None:
+    #     prev_dir = LOGGINGDIR
+    # prev_dir = Path(prev_dir)
+    handler_config = get_config().get("logging", {}).get("handler", {})
+    found = set()
     for hdlr in list(logger.handlers):
-        if isinstance(hdlr, logging.StreamHandler):
-            has_stream_handler = True
-            hdlr.setFormatter(_formatter)
-
-        if isinstance(hdlr, RotatingFileHandler):
-            if hdlr.baseFilename == prev_dir / f"{logger.name}.log":
+        if not hasattr(hdlr, "name"):
+            # skip handlers that don't have a name attribute since they are not ours
+            continue
+        # rotating file handler cannot be changed(?) so we need to remove it and add a new one
+        if isinstance(hdlr, logging.FileHandler):
+            if hdlr.baseFilename != LOGGINGDIR / f"{logger.name}.log":
                 hdlr.close()
                 logger.removeHandler(hdlr)
                 continue
+        if hdlr.name not in handler_config or not handler_config[hdlr.name]:
+            logger.removeHandler(hdlr)
+            continue
 
-        elif isinstance(hdlr, logging.Handler):
+        hdlr.setFormatter(_formatter)
+        found.add(hdlr.name)
+
+    for name, data in handler_config.items():
+        if not data:
+            continue
+        if name not in found:
+            classstring = data["handlerclass"]
+            cls = resolve(classstring)
+            handler_kwargs = data.get("options", {})
+            if issubclass(cls, logging.FileHandler):
+                handler_kwargs["filename"] = LOGGINGDIR / f"{logger.name}.log"
+            hdlr = cls(**handler_kwargs)
+            hdlr.name = name
             hdlr.setFormatter(_formatter)
+            logger.addHandler(hdlr)
 
-    if not has_stream_handler:
-        ch = logging.StreamHandler()
-        ch.setFormatter(_formatter)
-        logger.addHandler(ch)
+    # has_stream_handler = False
+    # for hdlr in list(logger.handlers):
+    #     if isinstance(hdlr, logging.StreamHandler):
+    #         has_stream_handler = True
+    #         hdlr.setFormatter(_formatter)
 
-    fh = RotatingFileHandler(
-        LOGGINGDIR / f"{logger.name}.log",
-        maxBytes=1024 * 1024 * 5,
-        backupCount=5,
-    )
-    fh.setFormatter(_formatter)
-    logger.addHandler(fh)
+    #     if isinstance(hdlr, RotatingFileHandler):
+    #         if hdlr.baseFilename == prev_dir / f"{logger.name}.log":
+    #             hdlr.close()
+    #             logger.removeHandler(hdlr)
+    #             continue
+
+    #     elif isinstance(hdlr, logging.Handler):
+    #         hdlr.setFormatter(_formatter)
+
+    # if not has_stream_handler:
+    #     ch = logging.StreamHandler()
+    #     ch.setFormatter(_formatter)
+    #     logger.addHandler(ch)
+
+    # fh = RotatingFileHandler(
+    #     LOGGINGDIR / f"{logger.name}.log",
+    #     maxBytes=1024 * 1024 * 5,
+    #     backupCount=5,
+    # )
+    # fh.setFormatter(_formatter)
+    # logger.addHandler(fh)
 
     # get child loggers
     for child in getChildren(logger):
-        _update_logger_handlers(child, prev_dir=prev_dir)
+        _update_logger_handlers(
+            child,
+            # prev_dir=prev_dir
+        )
 
 
 def get_logger(name: str, propagate: bool = True):
@@ -226,11 +268,14 @@ def set_logging_dir(path: Path):
       >>> set_logging_dir("/path/to/custom/logs")
     """
     global LOGGINGDIR
-    prev_dir = LOGGINGDIR
+    # prev_dir = LOGGINGDIR
     LOGGINGDIR = Path(path)
     if not LOGGINGDIR.exists():
         LOGGINGDIR.mkdir(parents=True)
-    _update_logger_handlers(FUNCNODES_LOGGER, prev_dir=prev_dir)
+    _update_logger_handlers(
+        FUNCNODES_LOGGER,
+        #  prev_dir=prev_dir
+    )
 
 
 def set_log_format(fmt: str = DEFAULT_FORMAT, max_length: Optional[int] = None):

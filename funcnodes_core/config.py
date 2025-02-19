@@ -127,6 +127,8 @@ def write_config(path: Path, config: ConfigType):
       >>> write_config("config.json", {"env_dir": "env"})
     """
     path = Path(path)
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
     write_json_secure(config, path, indent=2)
     write_json_secure(config, _bupath(path), indent=2)
 
@@ -234,7 +236,7 @@ def update_config(config: ConfigType):
     """
     global _CONFIG
     deep_update_dict(_CONFIG, config, inplace=True)
-    write_config(_BASE_CONFIG_DIR / "config.json", _CONFIG)
+    write_config(_CONFIG_DIR / "config.json", _CONFIG)
     reload()
 
 
@@ -363,14 +365,17 @@ def set_in_test(
                     shutil.rmtree(_BASE_CONFIG_DIR)
                 except Exception:
                     pass
+
         if config:
             write_config(_BASE_CONFIG_DIR / "config.json", config)
+
         reload(_BASE_CONFIG_DIR)
 
+        update_config({"logging": {"handler": {"file": False}}})
         # import here to avoid circular import
+        from ._logging import FUNCNODES_LOGGER, _update_logger_handlers, set_logging_dir  # noqa C0415 # pylint: disable=import-outside-toplevel
 
-        from ._logging import set_logging_dir  # noqa C0415 # pylint: disable=import-outside-toplevel
-
+        _update_logger_handlers(FUNCNODES_LOGGER)
         set_logging_dir(os.path.join(_BASE_CONFIG_DIR, "logs"))
     finally:
         _CONFIG_CHANGED = True  # we change this to true, that the config is reloaded
