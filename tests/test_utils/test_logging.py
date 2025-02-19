@@ -3,11 +3,12 @@ import logging
 from io import StringIO
 
 from funcnodes_core import get_logger, set_log_format
-from funcnodes_core.testing import teardown
+from funcnodes_core.testing import teardown, setup
 
 
 class TestNotTooLongStringFormatter(unittest.TestCase):
     def setUp(self):
+        setup()
         self.stream = StringIO()
         self.handler = logging.StreamHandler(self.stream)
         set_log_format(fmt=None, max_length=20)
@@ -47,13 +48,9 @@ class TestNotTooLongStringFormatter(unittest.TestCase):
 
 class TestFuncnodesLogger(unittest.TestCase):
     def setUp(self):
-        from funcnodes_core.testing import setup
-
         setup()
 
     def tearDown(self):
-        from funcnodes_core.testing import teardown
-
         teardown()
 
     def test_handler(self):
@@ -68,12 +65,14 @@ class TestFuncnodesLogger(unittest.TestCase):
         self.assertEqual(handler_names, ["console"])
 
     def test_patch(self):
-        from funcnodes_core.config import get_config_dir, update_config
+        from funcnodes_core.config import get_config_dir, update_config, get_config
         from tempfile import gettempdir
         from funcnodes_core import FUNCNODES_LOGGER
         from funcnodes_core._logging import _update_logger_handlers
 
         self.assertTrue(get_config_dir().is_relative_to(gettempdir()), get_config_dir())
+
+        logger_config = get_config().get("logging", {})
 
         update_config({"logging": {"handler": {"console": False}}})
         _update_logger_handlers(FUNCNODES_LOGGER)
@@ -83,4 +82,5 @@ class TestFuncnodesLogger(unittest.TestCase):
             handler_names.append(handler.name)
         self.assertEqual(handler_names, [])
 
-        # _update_logger_handlers(FUNCNODES_LOGGER)
+        update_config({"logging": logger_config})
+        _update_logger_handlers(FUNCNODES_LOGGER)
