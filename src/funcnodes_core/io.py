@@ -380,7 +380,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
 
         if uuid is None and id is not None:
             uuid = id
-        self._uuid = uuid or uuid4().hex
+        self._uuid = uuid or f"_{uuid4().hex}"
         self._name = name or self._uuid
         self._description = description
         self._value: Union[NodeIOType, NoValueType] = NoValue

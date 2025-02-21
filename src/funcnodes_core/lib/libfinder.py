@@ -6,6 +6,7 @@ import os
 import sys
 import funcnodes_core as fn
 import argparse
+from pathlib import Path
 
 
 class BaseShelfDict(TypedDict):
@@ -174,48 +175,86 @@ def find_shelf_from_path(
         if args is None:
             args = []
 
-        path = path.replace("\\", os.sep).replace("/", os.sep)
-        path = path.strip(os.sep)
-        args = [path] + args
+        args = [Path(path).as_posix()] + args
         args = parser.parse_args(args=args)
 
+        _path = Path(args.path).absolute()
         data = PathShelfDict(
-            path=os.path.dirname(os.path.abspath(path)),
-            module=os.path.basename(path),
+            path=_path.parent.as_posix(),
+            module=_path.stem,
             skip_requirements=args.skip_requirements,
         )
     else:
         data = path
 
-    if not os.path.exists(data["path"]):
-        raise FileNotFoundError(f"file {data['path']} not found")
+    data_path = Path(data["path"]).absolute()
 
-    if data["path"] not in sys.path:
-        sys.path.insert(0, data["path"])
+    if not data_path.exists():
+        raise FileNotFoundError(f"file {data_path} not found")
+
+    # check if path in sys.path
+    if str(data_path) not in sys.path:
+        sys.path.insert(0, str(data_path))
 
     # install requirements
     if not data.get("skip_requirements", False):
-        if "pyproject.toml" in os.listdir(data["path"]):
+        if (data_path / "pyproject.toml").exists():
             fn.FUNCNODES_LOGGER.debug(
-                f"pyproject.toml found in {data['path']}, generating requirements.txt"
+                f"pyproject.toml found in {data_path}, generating requirements.txt"
             )
-            # install poetry requirements
-            # save current path
-            cwd = os.getcwd()
-            # cd into the module path
-            os.chdir(data["path"])
-            # install via poetry
-            os.system("poetry update --no-interaction")
-            os.system(
-                "poetry export --without-hashes -f requirements.txt --output requirements.txt"
+            tomlfile = data_path / "pyproject.toml"
+
+            # TODO: check this, is it really neeed anymore
+            import tomllib
+
+            with open(tomlfile, "r") as f:
+                content = tomllib.load(f)
+            parsed = {}
+            poetry_deps = (
+                content.get("tool", {}).get("poetry", {}).get("dependencies", {})
             )
-            # cd back
-            os.chdir(cwd)
+            for package, info in poetry_deps.items():
+                if package == "python":  # ignore python version
+                    continue
+                if (
+                    isinstance(info, str)
+                    and info.startswith("{")
+                    and info.endswith("}")
+                ):
+                    info = tomllib.loads(info)
+                    if "extras" in info:
+                        extras = ",".join(info["extras"])
+                        parsed[f"{package}[{extras}]"] = info["version"].replace(
+                            "^=", ">="
+                        )
+                    elif "version" in info:
+                        parsed[package] = (
+                            info["version"].strip("^=").replace("^=", ">=")
+                        )
+                    elif "path" in info:
+                        parsed[info["path"]] = ""
+                else:
+                    parsed[package] = info.replace("^=", ">=")
+
+            pep_deps = content.get("project", {}).get("dependencies", [])
+            for package in pep_deps:
+                parsed[package] = ""
+
+            with open(data_path / "requirements.txt", "w+") as f:
+                for package, version in parsed.items():
+                    if version:
+                        if version[0] not in "=<>!~":
+                            version = f"=={version}"
+                        f.write(f"{package}{version}\n")
+                    else:
+                        f.write(f"{package}\n")
+
         if "requirements.txt" in os.listdir(data["path"]):
             fn.FUNCNODES_LOGGER.debug(
                 f"requirements.txt found in {data['path']}, installing requirements"
             )
             # install pip requirements
+            # TODO: installing schould be done via asynctoolkit???
             os.system(
                 f"{sys.executable} -m pip install -r {os.path.join(data['path'], 'requirements.txt')}"
             )
