@@ -8,6 +8,7 @@ class TestTesting(TestCase):
         pass
 
     def test_teardown(self):
+        testing.setup()
         self.assertGreaterEqual(len(FUNCNODES_LOGGER.handlers), 0)
         for handler in FUNCNODES_LOGGER.handlers:
             self.assertFalse(handler._closed)

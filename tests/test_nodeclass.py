@@ -282,6 +282,10 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("ip1", ins.inputs)
 
+        ip = ins.inputs["ip1"]
+        self.assertEqual(ip.uuid, "ip1")
+        self.assertEqual(ip.name, "ip1")
+
 
 class NodeClassMetaTest(unittest.TestCase):
     """

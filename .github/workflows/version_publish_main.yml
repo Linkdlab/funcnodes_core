@@ -28,7 +28,7 @@ jobs:
           python_version: 3.12
 
       - name: Run Tests
-        run: uv run pytest -n auto
+        run: uv run pytest
 
       - name: Get current package version
         shell: bash

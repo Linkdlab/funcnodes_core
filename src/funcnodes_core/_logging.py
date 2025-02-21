@@ -167,8 +167,13 @@ def _update_logger_handlers(
     handler_config = get_config().get("logging", {}).get("handler", {})
     found = set()
     for hdlr in list(logger.handlers):
+        # check if the handler is closed
+
         if not hasattr(hdlr, "name"):
             # skip handlers that don't have a name attribute since they are not ours
+            continue
+        if hasattr(hdlr, "_closed") and hdlr._closed:
+            logger.removeHandler(hdlr)
             continue
         # rotating file handler cannot be changed(?) so we need to remove it and add a new one
         if isinstance(hdlr, logging.FileHandler):
