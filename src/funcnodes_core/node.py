@@ -334,8 +334,8 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
 
         for opsid, op in ops.items():
             if op.uuid.startswith("_"):
-                if ip.name == ip._uuid:
-                    ip.name = ipsid
+                if op.name == op._uuid:
+                    op.name = opsid
                 op._uuid = opsid
 
         for io in list(ips.values()) + list(ops.values()):
