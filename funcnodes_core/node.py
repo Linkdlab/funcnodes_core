@@ -69,7 +69,7 @@ class NodeTriggerError(Exception):
         return cls(str(error)).with_traceback(error.__traceback__)
 
 
-def _get_nodeclass_inputs(node: Type[Node] | Node) -> List[NodeInput]:
+def _get_nodeclass_inputs(node: Type[Node] | Node) -> Dict[str, NodeInput]:
     """
     Iterates over the attributes of a Node instance and returns the ones that are instances of NodeInput.
 
@@ -79,7 +79,7 @@ def _get_nodeclass_inputs(node: Type[Node] | Node) -> List[NodeInput]:
     Returns:
         List[NodeInput]: The list of NodeInput instances found in the node.
     """
-    inputs = []
+    inputs: Dict[str, NodeInput] = {}
     nodeclass = node if isinstance(node, type) else node.__class__
     classattr = list(nodeclass.__dict__.keys())
     for attr_name in dir(node):
@@ -90,13 +90,13 @@ def _get_nodeclass_inputs(node: Type[Node] | Node) -> List[NodeInput]:
         try:
             attr = getattr(node, attr_name)
             if isinstance(attr, NodeInput):
-                inputs.append(attr)
+                inputs[attr_name] = attr
         except AttributeError:
             pass
     return inputs
 
 
-def _get_nodeclass_outputs(node: Type[Node] | Node) -> List[NodeOutput]:
+def _get_nodeclass_outputs(node: Type[Node] | Node) -> Dict[str, NodeOutput]:
     """
     Iterates over the attributes of a Node instance and returns the ones that are instances of NodeOutput.
 
@@ -106,7 +106,7 @@ def _get_nodeclass_outputs(node: Type[Node] | Node) -> List[NodeOutput]:
     Returns:
         List[NodeOutput]: The list of NodeOutput instances found in the node.
     """
-    outputs = []
+    outputs: Dict[str, NodeOutput] = {}
     nodeclass = node if isinstance(node, type) else node.__class__
     classattr = list(nodeclass.__dict__.keys())
     for attr_name in dir(node):
@@ -117,7 +117,7 @@ def _get_nodeclass_outputs(node: Type[Node] | Node) -> List[NodeOutput]:
         try:
             attr = getattr(node, attr_name)
             if isinstance(attr, NodeOutput):
-                outputs.append(attr)
+                outputs[attr_name] = attr
         except AttributeError:
             pass
     return outputs
@@ -137,7 +137,7 @@ def _parse_nodeclass_io(node: Node):
     inputs = _get_nodeclass_inputs(node)
 
     outputs = _get_nodeclass_outputs(node)
-    for ip in inputs:
+    for ipid, ip in inputs.items():
         ser: NodeInputOptions = ip.to_dict()
         node_io_render: NodeInputSerialization = node.render_options.get("io", {}).get(
             ip.uuid, {}
@@ -160,7 +160,7 @@ def _parse_nodeclass_io(node: Node):
             )
         )
 
-    for op in outputs:
+    for opid, op in outputs.items():
         ser: NodeOutputOptions = op.to_dict()
         node_io_render: NodeOutputSerialization = node.render_options.get("io", {}).get(
             op.uuid, {}
@@ -305,7 +305,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         get_config()["nodes"]["default_pretrigger_delay"]
     )  # 10ms
 
-    triggerinput = NodeInput(
+    _triggerinput = NodeInput(
         id="_triggerinput",
         name="( )",
         description="Trigger the node",
@@ -326,9 +326,16 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
 
         cls._class_io_serialized: Dict[str, NodeIOSerialization] = {}
 
-        for io in ips + ops:
-            ipser = io.serialize()
+        for ipsid, ip in ips.items():
+            if ip.uuid.startswith("_"):
+                ip._uuid = ipsid
 
+        for opsid, op in ops.items():
+            if op.uuid.startswith("_"):
+                op._uuid = opsid
+
+        for io in list(ips.values()) + list(ops.values()):
+            ipser = io.serialize()
             # check if it is present in the previous
             while ipser["id"] in cls._class_io_serialized:
                 io._uuid = io.uuid + "_"
@@ -429,10 +436,12 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             node_id=cls.node_id,
             inputs=[
                 ip.serialize_class()
-                for ip in _get_nodeclass_inputs(cls)
+                for ip in _get_nodeclass_inputs(cls).values()
                 if ip.uuid != "_triggerinput"
             ],
-            outputs=[op.serialize_class() for op in _get_nodeclass_outputs(cls)],
+            outputs=[
+                op.serialize_class() for op in _get_nodeclass_outputs(cls).values()
+            ],
             description=cls.description,
             node_name=getattr(cls, "node_name", cls.__name__),
         )

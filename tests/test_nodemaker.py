@@ -81,6 +81,7 @@ class TestNodeClassMaker(unittest.IsolatedAsyncioTestCase):
             node.node_id, "test_node_decorator_registers_node_class_multiple_outs"
         )
         self.assertEqual(node.get_input("input1").name, "input1")
+        self.assertEqual(node.input_input1.name, "input1")
         self.assertEqual(node.get_output("out0").name, "out0")
         self.assertEqual(node.get_output("out1").name, "out1")
 
