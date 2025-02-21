@@ -16,6 +16,8 @@ jobs:
       id-token: write
     environment:
       name: main
+    env:
+      PYTHONHASHSEED: 0
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
