@@ -348,7 +348,7 @@ class NodeSpace(EventEmitterMixin):
         node.nodespace = self
         node.on("*", self.on_node_event)
         node.on_error(self.on_node_error)
-        node_ser = node.serialize()
+        node_ser = node.full_serialize(with_io_values=False)
         msg = MessageInArgs(node=node_ser)
         self.emit("node_added", msg)
 
