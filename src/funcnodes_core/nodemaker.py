@@ -116,9 +116,9 @@ def node_class_maker(
     cls_dict = {"func": _wrapped_func, "o_func": func, **kwargs}
 
     for ip in inputs:
-        cls_dict["input_" + ip._name] = ip
+        cls_dict["input_" + ip.uuid] = ip
     for op in outputs:
-        cls_dict["output_" + op._name] = op
+        cls_dict["output_" + op.uuid] = op
     try:
         name = "".join(
             x.capitalize()

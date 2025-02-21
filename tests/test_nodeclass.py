@@ -259,6 +259,29 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
             expected,
         )
 
+    def test_input_name_differs_id(self):
+        class TestNode(Node):
+            node_id = "test_node"
+            ip1 = NodeInput(id="input")
+
+            async def func(self, input: int) -> int:
+                return input
+
+        ins = TestNode()
+        self.assertIn("input", ins.inputs)
+
+    def test_input_no_id(self):
+        class TestNode(Node):
+            node_id = "test_node"
+            ip1 = NodeInput()
+
+            async def func(self, ip1: int) -> int:
+                return ip1
+
+        ins = TestNode()
+
+        self.assertIn("ip1", ins.inputs)
+
 
 class NodeClassMetaTest(unittest.TestCase):
     """
@@ -337,14 +360,3 @@ class NodeClassMetaTest(unittest.TestCase):
 
             class AnotherBaseNodeClass(BaseNodeClass):
                 node_id = "test_meta_raises_error_on_duplicate_registration"
-
-    def test_input_name_differs_id(self):
-        class TestNode(Node):
-            node_id = "test_node"
-            ip1 = NodeInput(id="input")
-
-            async def func(self, input: int) -> int:
-                return input
-
-        ins = TestNode()
-        self.assertIn("input", ins.inputs)
