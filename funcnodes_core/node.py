@@ -395,6 +395,9 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             if self.ready_to_trigger():
                 self.request_trigger()
 
+        if not hasattr(self, "node_name") or self.node_name is None:
+            self.node_name = self.__class__.__name__
+
     @property
     def pretrigger_delay(self):
         return self._pretrigger_delay
@@ -496,7 +499,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             name=self.name,
             id=self.uuid,
             node_id=self.node_id,
-            node_name=getattr(self, "node_name", self.__class__.__name__),
+            node_name=self.node_name,
             io={},
         )
 
