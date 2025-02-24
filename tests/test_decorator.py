@@ -503,3 +503,22 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
             "This is a node created with the decorator and a docstring",
         )
         self.assertEqual(MyNode().description, "This is a node created with the class")
+
+    async def test_io_rename(self):
+        @fn.NodeDecorator(
+            node_id="my_node",
+            inputs=[
+                {"name": "a"},
+                {"name": "b"},
+            ],
+        )
+        def myfunction(
+            var_name_i_dont_like_a: int = 1, var_name_i_dont_like_b: int = 2
+        ) -> int:
+            return var_name_i_dont_like_a + var_name_i_dont_like_b
+
+        node = myfunction()
+
+        await node
+
+        self.assertEqual(node.outputs["out"].value, 3)

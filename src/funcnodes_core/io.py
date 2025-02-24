@@ -859,7 +859,13 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
             An instance of NodeInput initialized with the serialized data.
         """
         return cls(
-            uuid=serialized_input["name"],
+            uuid=serialized_input.get(
+                # overwriting the name attribute losses reference,
+                # which is why we use _name (see expose_method if exposedfunctionality)
+                "_name",
+                serialized_input.get("name"),
+            ),
+            name=serialized_input.get("name"),
             description=serialized_input.get("description"),
             type=serialized_input["type"],
             allow_multiple=serialized_input.get("allow_multiple"),

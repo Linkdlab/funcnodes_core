@@ -1,7 +1,7 @@
 [project]
 name = "funcnodes-core"
 
-version = "0.3.33"
+version = "0.3.34"
 
 description = "core package for funcnodes"
 authors = [{name = "Julian Kimmig", email = "julian.kimmig@linkdlab.de"}]
@@ -18,7 +18,7 @@ classifiers = [
 
 requires-python = ">=3.11"
 dependencies = [
-    "exposedfunctionality >=0.3.11",
+    "exposedfunctionality >=0.3.20",
     "python-dotenv",
     "setuptools",
     "dill",
