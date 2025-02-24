@@ -508,8 +508,8 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
         @fn.NodeDecorator(
             node_id="my_node",
             inputs=[
-                {"id": "var_name_i_dont_like_a", "name": "a"},
-                {"id": "var_name_i_dont_like_b", "name": "b"},
+                {"name": "a"},
+                {"name": "b"},
             ],
         )
         def myfunction(
@@ -518,8 +518,6 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
             return var_name_i_dont_like_a + var_name_i_dont_like_b
 
         node = myfunction()
-
-        print(node.o_func.ef_funcmeta)
 
         await node
 
