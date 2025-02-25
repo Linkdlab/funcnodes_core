@@ -293,3 +293,45 @@ class TestNoValue(unittest.TestCase):
         pickled = pickle.dumps(NoValue)
         unpickled = pickle.loads(pickled)
         self.assertIs(NoValue, unpickled)
+
+
+class TestIOExamples(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+
+    async def test_io1(self):
+        class IOModNode(fn.Node):
+            node_id = "iomodnode"
+            a = fn.NodeInput(
+                value_options={"min": 0, "max": 1, "step": 0.1}, default=0.5, type=float
+            )
+
+            b = fn.NodeInput(
+                render_options={"type": "color"}, type=str, default="#ff0000"
+            )
+
+            c = fn.NodeInput(
+                value_options={"options": ["a", "b", "c"]}, default="a", type=str
+            )
+            d = fn.NodeInput(
+                value_options={
+                    "options": {
+                        "type": "enum",
+                        "keys": ["full", "empty"],
+                        "values": [1, 0],
+                    }
+                }
+            )
+
+            async def func(self, a: float, b: str, c: str, d: float):
+                self.inputs["a"].set_value(float(d), does_trigger=False)
+
+        node = IOModNode()
+
+        self.assertEqual(node.inputs["a"].value, 0.5)
+        self.assertFalse(node.ready(), node.ready_state())
+        node.inputs["d"].value = 1
+        self.assertTrue(node.ready(), node.ready_state())
+        await node
+
+        self.assertEqual(node.inputs["a"].value, 1)

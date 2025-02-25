@@ -24,6 +24,15 @@ class Shelf:
     shelf_id: Optional[str] = None
     parent_shelf: Optional[Shelf] = None
 
+    def __post_init__(self):
+        # make nodes unique
+        self.nodes = list({id(node): node for node in self.nodes}.values())
+
+        # make subshelves unique by object reference without changing the order
+        self.subshelves = list(
+            {id(subshelf): subshelf for subshelf in self.subshelves}.values()
+        )
+
     @classmethod
     def from_dict(cls, data: Dict) -> Shelf:
         if isinstance(data, Shelf):
@@ -70,10 +79,16 @@ class Shelf:
 
     def add_node(self, node: Type[Node]):
         self.nodes.append(node)
+        # make nodes unique
+        self.nodes = list({id(node): node for node in self.nodes}.values())
 
     def add_subshelf(self, shelf: Shelf):
         shelf.parent_shelf = self
         self.subshelves.append(shelf)
+        # make subshelves unique by object reference without changing the order
+        self.subshelves = list(
+            {id(subshelf): subshelf for subshelf in self.subshelves}.values()
+        )
 
 
 class ShelfReferenceLost(ReferenceError):

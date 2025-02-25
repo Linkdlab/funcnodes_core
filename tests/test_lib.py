@@ -141,3 +141,14 @@ class TestLib(unittest.TestCase):
         self.assertEqual(lib.shelves[0].subshelves, [])
         self.assertEqual(s, lib.shelves[0])
         self.assertEqual(s2, s)
+
+    def test_shelf_unique_nodes(self):
+        shelf = Shelf(name="testshelf", nodes=[testfunc, testfunc])
+        self.assertEqual(len(shelf.nodes), 1)
+
+    def test_shelf_unique_subshelves(self):
+        subshelf = Shelf(name="testshelf", nodes=[testfunc, testfunc])
+        shelf = Shelf(name="testshelf", subshelves=[subshelf, subshelf])
+        self.assertEqual(len(shelf.subshelves), 1)
+        self.assertEqual(len(shelf.subshelves[0].nodes), 1)
+        self.assertEqual(len(flatten_shelf(shelf)[0]), 1)
