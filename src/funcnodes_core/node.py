@@ -465,6 +465,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             ],
             "status": self.status(),
             "node_name": self.node_name,
+            "description": self.description,
         }
 
         renderopt = self.render_options

@@ -253,8 +253,7 @@ def raise_allow_connections(src: NodeIO, trg: NodeIO):
 class IORenderOptions(TypedDict, total=False):
     """Typing definition for Node Input/Output render options."""
 
-    step: str
-    preview_type: str
+    set_default: bool
     type: str
 
 
