@@ -772,12 +772,12 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
     Inherits from NodeIO and represents a connection that can receive data.
     """
 
-    class DefaultFactory:
-        def __init__(self, func: Callable[[], NodeIOType]) -> None:
-            self.func = func
-
-        def __call__(self):
-            return self.func()
+    @staticmethod
+    def DefaultFactory(
+        func: Callable[[NodeInput[NodeIOType]], NodeIOType],
+    ) -> Callable[[NodeInput[NodeIOType]], NodeIOType]:
+        func._is_default_factory = True
+        return func
 
     default_does_trigger = True
     default_required = True
@@ -830,8 +830,8 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
 
     @property
     def default(self) -> NodeIOType | NoValueType:
-        if isinstance(self._default, NodeInput.DefaultFactory):
-            return self._default()
+        if hasattr(self._default, "_is_default_factory"):
+            return self._default(self)
         return self._default
 
     @default.setter
