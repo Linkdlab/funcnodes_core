@@ -17,6 +17,8 @@ import asyncio
 import inspect
 from uuid import uuid4
 from weakref import WeakValueDictionary, ref
+
+from funcnodes_core.utils.wrapper import NoOverrideMixin, savemethod, saveproperty
 from .exceptions import NodeIdAlreadyExistsError
 from .io import (
     NodeInput,
@@ -285,7 +287,7 @@ NodeClassDictsKeys: List[NodeClassDictKeysValues] = [
 ]
 
 
-class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
+class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
     """
     The base class for all nodes, making use of the custom metaclass `NodeMeta` to handle
     automatic registration. It inherits from `EventEmitterMixin` for event handling capabilities
@@ -321,6 +323,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         """The function to be executed when the node is triggered."""
 
     def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
         ips = _get_nodeclass_inputs(cls)
         ops = _get_nodeclass_outputs(cls)
 
@@ -409,7 +412,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         if not hasattr(self, "node_name") or self.node_name is None:
             self.node_name = self.__class__.__name__
 
-    @property
+    @saveproperty
     def pretrigger_delay(self):
         return self._pretrigger_delay
 
@@ -422,7 +425,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             raise ValueError("Pretrigger delay cannot be negative")
         self._pretrigger_delay = value
 
-    @property
+    @saveproperty
     def progress(self) -> Type[tqdm]:
         return lambda *args, **kwargs: NodeTqdm(
             *args, broadcast_func=self._broadcast_progress, **kwargs
@@ -575,12 +578,12 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
     # endregion serialization
 
     # region properties
-    @property
+    @saveproperty
     def uuid(self):
         """The unique identifier of the node."""
         return self._uuid
 
-    @property
+    @saveproperty
     def name(self):
         """The name of the node."""
         return self._name
@@ -589,7 +592,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
     def name(self, value):
         self._name = value or f"{self.__class__.__name__}({self.uuid})"
 
-    @property
+    @saveproperty
     def reset_inputs_on_trigger(self):
         """Whether to reset the inputs of the node when it is triggered."""
         return (
@@ -598,44 +601,44 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             else self.default_reset_inputs_on_trigger
         )
 
-    @property
+    @saveproperty
     def render_options(self):
         return self._render_options
 
-    @property
+    @saveproperty
     def io_options(self):
         return self._io_options
 
-    @property
+    @saveproperty
     def triggerstack(self) -> Optional[TriggerStack]:
         """The trigger stack associated with the node's execution."""
         return self._triggerstack
 
-    @property
+    @saveproperty
     def outputs(self) -> Dict[str, NodeOutput]:
         """returns a dictionary of the outputs of this node
         in the format {output.uuid:output}
         """
         return {op.uuid: op for op in self._outputs}
 
-    @property
+    @saveproperty
     def o(self) -> Dict[str, NodeOutput]:
         """short for self.outputs"""
         return self.outputs
 
-    @property
+    @saveproperty
     def inputs(self) -> Dict[str, NodeInput]:
         """returns a dictionary of the inputs of this node
         in the format {input.uuid:input}
         """
         return {ip.uuid: ip for ip in self._inputs}
 
-    @property
+    @saveproperty
     def i(self) -> Dict[str, NodeInput]:
         """short for self.inputs"""
         return self.inputs
 
-    @property
+    @saveproperty
     def in_trigger(self):
         """Whether the node is currently in a trigger state.
         checked if the triggerstack is not None and if it is done
@@ -646,7 +649,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
                 self._triggerstack = None
         return self._triggerstack is not None or self._trigger_open
 
-    @property
+    @saveproperty
     def disabled(self) -> bool:
         """Getter and setter for the node disabled state.
         Parameters
@@ -659,7 +662,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         """
         return self._disabled
 
-    @property
+    @saveproperty
     def nodespace(self) -> NodeSpace | None:
         """Getter for the node's nodespace"""
         if self._nodespace is None:
@@ -677,16 +680,19 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
     # endregion properties
 
     # region node methods
+    @savemethod
     def ready(self) -> bool:
         """Whether the node is ready"""
         return self.inputs_ready()
 
+    @savemethod
     def ready_state(self) -> NodeReadyState:
         """Returns the ready state of the node"""
         return {
             "inputs": {ip.uuid: ip.ready_state() for ip in self._inputs},
         }
 
+    @savemethod
     def ready_to_trigger(self):
         """Whether the node is ready to be triggered"""
         # check wherer a running eventloop is present
@@ -711,7 +717,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             outputs={op.uuid: op.status() for op in self._outputs},
         )
 
-    @property
+    @saveproperty
     def is_working(self) -> bool:
         """Getter for the node working state.
         Returns
@@ -863,6 +869,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
 
     # region triggering
 
+    @savemethod
     def __call__(self) -> asyncio.Task:
         """
         Executes the node's function asynchronously and returns an asyncio.Task object.
@@ -949,6 +956,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
             # otherwise set the _requests_trigger attribute to True
             self._requests_trigger = True
 
+    @savemethod
     async def await_trigger(self):
         """
         Asynchronously waits for the node to be ready to trigger and then triggers it
@@ -968,16 +976,19 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         a = await self._triggerstack
         return a
 
+    @savemethod
     async def wait_for_trigger_finish(self):
         if self.in_trigger:
             await self.asynceventmanager.wait("triggerdone")
 
+    @savemethod
     async def await_until_complete(self):
         """
         Asynchronously runs the node until completion.
         """
         return await run_until_complete(self)
 
+    @savemethod
     def __await__(self):
         """
         Allows an instance of Node to be awaited. This will request the node to be triggered and
@@ -988,6 +999,7 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         self.request_trigger()
         return run_until_complete(self).__await__()
 
+    @savemethod
     @emit_before()
     @emit_after()
     def trigger(self, triggerstack: Optional[TriggerStack] = None) -> TriggerStack:
@@ -1016,7 +1028,6 @@ class Node(EventEmitterMixin, ABC, metaclass=NodeMeta):
         return self._triggerstack
 
     # endregion triggering
-
     def cleanup(self):
         self.emit("cleanup")
         for ip in list(self._inputs):
