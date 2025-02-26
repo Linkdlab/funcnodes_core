@@ -286,6 +286,28 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ip.uuid, "ip1")
         self.assertEqual(ip.name, "ip1")
 
+    def test_saveprop_overwrite(self):
+        with self.assertRaises(TypeError):
+
+            class TestNode(Node):
+                node_id = "test_node"
+                name = NodeInput()
+
+                async def func(self, name: int) -> int:
+                    return name
+
+    def test_savemethod_overwrite(self):
+        with self.assertRaises(TypeError):
+
+            class TestNode(Node):
+                node_id = "test_node"
+
+                def __call__(self):
+                    pass
+
+                async def func(self) -> int:
+                    pass
+
 
 class NodeClassMetaTest(unittest.TestCase):
     """
