@@ -13,6 +13,7 @@ from typing import (
     Tuple,
     Required,
 )
+from collections.abc import Callable
 from uuid import uuid4
 from exposedfunctionality import FunctionInputParam, FunctionOutputParam
 from exposedfunctionality.function_parser.types import (
@@ -771,6 +772,13 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
     Inherits from NodeIO and represents a connection that can receive data.
     """
 
+    class DefaultFactory:
+        def __init__(self, func: Callable[[], NodeIOType]) -> None:
+            self.func = func
+
+        def __call__(self):
+            return self.func()
+
     default_does_trigger = True
     default_required = True
     default_allow_multiple = False
@@ -806,7 +814,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
 
     def get_value(self):
         v = super().get_value()
-        return v if v is not NoValue else self._default
+        return v if v is not NoValue else self.default
 
     def full_serialize(self, with_value=False) -> FullNodeInputJSON:
         return FullNodeInputJSON(
@@ -822,6 +830,8 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
 
     @property
     def default(self) -> NodeIOType | NoValueType:
+        if isinstance(self._default, NodeInput.DefaultFactory):
+            return self._default()
         return self._default
 
     @default.setter

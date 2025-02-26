@@ -216,6 +216,10 @@ class TestNodeIO(unittest.TestCase):
         self.output_1.value = 456
         self.assertEqual(self.input_1.value, 456)
 
+    def test_input_default_factory(self):
+        ip = NodeInput(default=NodeInput.DefaultFactory(lambda: 123))
+        self.assertEqual(ip.value, 123)
+
 
 class RaiseAllowConnectionsTest(unittest.TestCase):
     def setUp(self):
