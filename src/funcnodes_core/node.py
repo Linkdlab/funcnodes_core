@@ -662,6 +662,14 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         """
         return self._disabled
 
+    @emit_after()
+    def set_nodespace(self, nodespace: NodeSpace):
+        """Sets the node's nodespace"""
+        if nodespace is None:
+            self._nodespace = None
+        else:
+            self._nodespace = ref(nodespace)
+
     @saveproperty
     def nodespace(self) -> NodeSpace | None:
         """Getter for the node's nodespace"""
@@ -672,10 +680,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
     @nodespace.setter
     def nodespace(self, value: NodeSpace | None):
         """Setter for the node's nodespace"""
-        if value is None:
-            self._nodespace = None
-        else:
-            self._nodespace = ref(value)
+        self.set_nodespace(value)
 
     # endregion properties
 
