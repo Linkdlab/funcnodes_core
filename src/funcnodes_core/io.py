@@ -773,6 +773,10 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
     """
 
     @staticmethod
+    def is_default_factory(obj: Any):
+        return hasattr(obj, "_is_default_factory")
+
+    @staticmethod
     def DefaultFactory(
         func: Callable[[NodeInput[NodeIOType]], NodeIOType],
     ) -> Callable[[NodeInput[NodeIOType]], NodeIOType]:
@@ -830,7 +834,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
 
     @property
     def default(self) -> NodeIOType | NoValueType:
-        if hasattr(self._default, "_is_default_factory"):
+        if NodeInput.is_default_factory(self._default):
             return self._default(self)
         return self._default
 
@@ -912,6 +916,8 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         ser: IOOptions = NodeInputOptions(
             **self.serialize(drop=False),
         )
+        if NodeInput.is_default_factory(self._default):
+            ser["default"] = self._default
         return ser
 
     def deserialize(self, data: NodeInputSerialization) -> None:

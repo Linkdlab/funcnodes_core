@@ -217,7 +217,14 @@ class TestNodeIO(unittest.TestCase):
         self.assertEqual(self.input_1.value, 456)
 
     def test_input_default_factory(self):
-        ip = NodeInput[int](default=NodeInput.DefaultFactory(lambda ip: 123))
+        class TestNode(fn.Node):
+            node_id = "testnode"
+            ip = NodeInput[int](default=NodeInput.DefaultFactory(lambda ip: 123))
+
+            async def func(self, ip: int):
+                pass
+
+        ip = TestNode().inputs["ip"]
         self.assertTrue(hasattr(ip._default, "_is_default_factory"))
         self.assertEqual(ip.default, 123, ip._default)
         self.assertEqual(ip.value, 123)
