@@ -1,10 +1,10 @@
 from typing import Dict
-
+from collections.abc import Callable
 from importlib.metadata import entry_points
 from importlib import reload
 import sys
 from .._logging import FUNCNODES_LOGGER
-from .plugins_types import InstalledModule
+from .plugins_types import InstalledModule, BasePlugin  # noqa: F401
 
 
 def get_installed_modules() -> Dict[str, InstalledModule]:
@@ -51,3 +51,21 @@ def get_installed_modules() -> Dict[str, InstalledModule]:
             FUNCNODES_LOGGER.exception(exc)
 
     return named_objects
+
+
+PLUGIN_FUNCTIONS: Dict[str, Callable[[InstalledModule], None]] = {}
+
+
+def register_setup_plugin(plugin_function: Callable[[InstalledModule], None]):
+    """
+    Register a function to be called when a module is loaded.
+
+    Args:
+      plugin_function (Callable[[InstalledModule],None]): The function to call when a module is loaded.
+
+    Returns:
+      None
+    """
+    module = plugin_function.__module__
+
+    PLUGIN_FUNCTIONS[module] = plugin_function

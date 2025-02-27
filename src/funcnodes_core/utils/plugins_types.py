@@ -1,10 +1,5 @@
-from typing import Dict, Any, Optional, TypedDict
+from typing import Dict, Any, Optional, TypedDict, List
 from dataclasses import dataclass, field
-
-try:
-    from funcnodes_react_flow import ReactPlugin
-except (ModuleNotFoundError, ImportError):
-    ReactPlugin = dict
 
 
 class RenderOptions(TypedDict, total=False):
@@ -18,6 +13,18 @@ class RenderOptions(TypedDict, total=False):
 
     typemap: dict[str, str]
     inputconverter: dict[str, str]
+
+
+class BasePlugin(TypedDict):
+    """
+    A typed dictionary for a base plugin.
+
+    Attributes:
+      description (str): The description of the plugin.
+      entry_points (Dict[str, Any]): Dictionary of entry points for the plugin.
+    """
+
+    module: str
 
 
 @dataclass
@@ -34,7 +41,7 @@ class InstalledModule:
     module: Any
     description: Optional[str] = None
     entry_points: Dict[str, Any] = field(default_factory=dict)
-    react_plugin: Optional[ReactPlugin] = None
+    plugins: List[BasePlugin] = field(default_factory=list)
     render_options: Optional[RenderOptions] = None
     version: Optional[str] = None
 
@@ -45,7 +52,7 @@ class InstalledModule:
             "description": self.description,
             "entry_points": list(self.entry_points.keys()),
             "version": self.version,
-            "react_plugin": self.react_plugin is not None,
+            "plugins": [p["module"] for p in self.plugins],
             "render_options": self.render_options is not None,
         }
 
