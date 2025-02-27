@@ -76,7 +76,7 @@ def serialize_node_for_saving(node: Node):
 
     properties = node.properties
     if properties:
-        ser["prop"] = properties
+        ser["properties"] = properties
 
     return ser
 
