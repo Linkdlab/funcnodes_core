@@ -74,6 +74,10 @@ def serialize_node_for_saving(node: Node):
     if renderopt:
         ser["render_options"] = renderopt
 
+    properties = node.properties
+    if properties:
+        ser["properties"] = properties
+
     return ser
 
 
