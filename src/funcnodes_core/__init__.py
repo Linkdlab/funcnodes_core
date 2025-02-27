@@ -1,4 +1,4 @@
-__version__ = "0.3.41"
+__version__ = "0.3.43"
 
 from .io import (
     NodeInput,
