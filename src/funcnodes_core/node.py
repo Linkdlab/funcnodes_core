@@ -370,7 +370,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         properties: Optional[Dict[str, Any]] = None,
     ):
         super().__init__()
-        self._properties = properties or {}
+        self._properties = properties if isinstance(properties, dict) else {}
         self._inputs: List[NodeInput] = []
         self._outputs: List[NodeOutput] = []
         self._triggerstack: Optional[TriggerStack] = None
