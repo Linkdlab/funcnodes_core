@@ -308,6 +308,23 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
                 async def func(self) -> int:
                     pass
 
+    def test_custom_property(self):
+        class TestNode(Node):
+            node_id = "test_node"
+
+            async def func(self) -> int:
+                return 1
+
+        ins = TestNode()
+        ins.set_property("pos", (1, 2))
+        self.assertEqual(ins.get_property("pos"), (1, 2))
+        ser = ins.serialize()
+        self.assertEqual(ser["properties"], {"pos": (1, 2)})
+        ins2 = TestNode()
+        self.assertIsNone(ins2.get_property("pos"))
+        ins2.deserialize(ser)
+        self.assertEqual(ins2.get_property("pos"), (1, 2))
+
 
 class NodeClassMetaTest(unittest.TestCase):
     """
