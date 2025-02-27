@@ -3,16 +3,7 @@ import gc
 from .config import update_render_options
 from .lib import check_shelf
 from ._logging import FUNCNODES_LOGGER
-from .utils.plugins import get_installed_modules, InstalledModule
-
-try:
-    from funcnodes_react_flow import add_react_plugin, ReactPlugin
-except (ModuleNotFoundError, ImportError):
-
-    def add_react_plugin(*args, **kwargs):
-        pass
-
-    ReactPlugin = dict
+from .utils.plugins import get_installed_modules, InstalledModule, PLUGIN_FUNCTIONS
 
 
 def setup_module(mod_data: InstalledModule) -> Optional[InstalledModule]:
@@ -21,11 +12,25 @@ def setup_module(mod_data: InstalledModule) -> Optional[InstalledModule]:
     mod = mod_data.module
     if not mod:
         return None
-    if "react_plugin" in entry_points:
-        add_react_plugin(mod, entry_points["react_plugin"])
-    elif hasattr(mod, "REACT_PLUGIN"):
-        add_react_plugin(mod, mod.REACT_PLUGIN)
-        entry_points["react_plugin"] = mod.REACT_PLUGIN
+
+    # first we try to register the plugin setup function as this might register other functions
+    try:
+        if "plugin_setup" in entry_points:
+            entry_points["plugin_setup"]()
+        elif hasattr(mod, "FUNCNODES_PLUGIN_SETUP"):
+            mod.FUNCNODES_PLUGIN_SETUP()
+            entry_points["render_options"] = mod.FUNCNODES_PLUGIN_SETUP
+    except Exception as e:
+        FUNCNODES_LOGGER.error("Error in plugin setup %s: %s" % (mod.__name__, e))
+
+    # Then we call the plugin functions
+    for pluginf in PLUGIN_FUNCTIONS.values():
+        try:
+            pluginf(mod_data)
+        except Exception as e:
+            FUNCNODES_LOGGER.error(
+                "Error in setup_module plugin function %s: %s" % (mod.__name__, e)
+            )
 
     if "render_options" in entry_points:
         update_render_options(entry_points["render_options"])

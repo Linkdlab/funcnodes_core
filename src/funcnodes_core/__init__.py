@@ -1,4 +1,4 @@
-__version__ = "0.3.40"
+__version__ = "0.3.41"
 
 from .io import (
     NodeInput,
@@ -46,6 +46,9 @@ from .utils.nodeutils import get_deep_connected_nodeset, run_until_complete
 from .utils.wrapper import signaturewrapper
 
 from .utils.plugins_types import RenderOptions
+
+from .utils import plugins
+
 
 from .utils.functions import make_run_in_new_process, make_run_in_new_thread
 from .eventmanager import EventEmitterMixin, emit_after, emit_before
@@ -112,4 +115,5 @@ __all__ = [
     "lib",
     "nodemaker",
     "logging",
+    "plugins",
 ]
