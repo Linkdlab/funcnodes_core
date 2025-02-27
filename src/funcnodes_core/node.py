@@ -367,8 +367,10 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         io_options: Optional[Dict[str, NodeInputOptions | NodeOutputOptions]] = None,
         trigger_on_create: Optional[bool] = None,
         pretrigger_delay: Optional[float] = None,
+        properties: Optional[Dict[str, Any]] = None,
     ):
         super().__init__()
+        self._properties = properties or {}
         self._inputs: List[NodeInput] = []
         self._outputs: List[NodeOutput] = []
         self._triggerstack: Optional[TriggerStack] = None
@@ -435,6 +437,16 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         msg = MessageInArgs(src=self, info=info)
         self.emit("progress", msg)
 
+    @saveproperty
+    def properties(self):
+        return self._properties
+
+    def set_property(self, key: str, value: Any):
+        self._properties[key] = value
+
+    def get_property(self, key: str, default: Any = None):
+        return self._properties.get(key, default)
+
     # region serialization
     @classmethod
     def serialize_cls(cls) -> SerializedNodeClass:
@@ -474,6 +486,9 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         renderopt = self.render_options
         if renderopt:
             ser["render_options"] = renderopt
+        properties = self.properties
+        if properties:
+            ser["properties"] = properties
         return ser
 
     def deserialize(self, data: NodeJSON):
@@ -502,6 +517,21 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             for iod in self._inputs + self._outputs:
                 if iod.uuid in data["io"]:
                     iod.deserialize(data["io"][iod.uuid])  # type: ignore
+
+        if "description" in data and data["description"]:
+            self.description = data["description"]
+
+        if "render_options" in data:
+            self._render_options = deep_fill_dict(
+                data["render_options"],  # type: ignore
+                self._render_options,  # type: ignore
+            )
+
+        if "properties" in data:
+            self._properties = {
+                **self._properties,
+                **data["properties"],
+            }
 
         if self.trigger_on_create:
             if self.ready_to_trigger():
@@ -567,6 +597,10 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         renderopt = self.render_options
         if renderopt:
             ser["render_options"] = renderopt
+
+        properties = self.properties
+        if properties:
+            ser["properties"] = properties
 
         return ser
 
@@ -1124,6 +1158,7 @@ class FullNodeJSON(BaseNodeJSON):
     io: List[FullNodeIOJSON]
     status: NodeStatus
     render_options: NotRequired[RenderOptions]
+    properties: NotRequired[Dict[str, Any]]
 
 
 # region node registry
@@ -1234,6 +1269,21 @@ class PlaceHolderNode(Node):
                     self.add_input(NodeInput.from_serialized_nodeio(iodate))  # type: ignore
                 else:
                     self.add_output(NodeOutput.from_serialized_nodeio(iodate))  # type: ignore
+
+        if "description" in data and data["description"]:
+            self.description = data["description"]
+
+        if "render_options" in data:
+            self._render_options = deep_fill_dict(
+                data["render_options"],  # type: ignore
+                self._render_options,  # type: ignore
+            )
+
+        if "properties" in data:
+            self._properties = {
+                **self._properties,
+                **data["properties"],
+            }
 
 
 def nodeencoder(obj, preview=False) -> Tuple[Any, bool]:
