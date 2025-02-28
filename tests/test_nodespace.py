@@ -3,6 +3,7 @@ from funcnodes_core import NodeSpace, Node, NodeInput, NodeOutput, Shelf
 import gc
 
 import funcnodes_core as fn
+import json
 
 fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
 
@@ -189,3 +190,14 @@ class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
 
         # # make sure there is no garbage
         # self.assertEqual(garb, [])
+
+    def test_set_secret_prop(self):
+        self.nodespace.set_secret_property("test", "test")
+        ser = json.dumps(self.nodespace.serialize())
+        assert "test" not in ser
+        self.nodespace.set_property("test", "test", secret=True)
+        ser = json.dumps(self.nodespace.serialize())
+        assert "test" not in ser
+        self.nodespace.set_property("test", "test")
+        ser = json.dumps(self.nodespace.serialize())
+        assert "test" in ser
