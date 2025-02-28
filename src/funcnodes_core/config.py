@@ -350,7 +350,7 @@ def set_in_test(
                     fail_on_warnings = [fail_on_warnings]
 
             for w in fail_on_warnings:
-                warnings.simplefilter("error", DeprecationWarning)
+                warnings.simplefilter("error", w, append=True)
 
         fn = "funcnodes_test"
         if add_pid:
