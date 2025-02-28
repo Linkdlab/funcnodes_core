@@ -2,7 +2,6 @@ from typing import List, Dict, TypedDict, Tuple, Any
 import json
 from uuid import uuid4
 import traceback
-import os
 
 from .node import (
     FullNodeJSON,
@@ -67,7 +66,10 @@ class NodeSpace(EventEmitterMixin):
         """
         super().__init__()
         self._nodes: Dict[str, Node] = {}
-        self._properties: Dict[str, Any] = {}
+        self._properties: Dict[str, Any] = {}  # public properties are serialized
+        self._secret_properties: Dict[  # secret properties are not serialized
+            str, Any
+        ] = {}
         self.lib = Library()
         if id is None:
             id = uuid4().hex
@@ -114,52 +116,7 @@ class NodeSpace(EventEmitterMixin):
 
         return edges
 
-    @property
-    def files(self) -> Dict[str, str]:
-        """
-        Returns a dictionary of all files in the NodeSpace.
-
-        Returns:
-          Dict[str, str]: A dictionary of all files in the NodeSpace.
-        """
-        if "files" not in self._properties:
-            self._properties["files"] = {}
-        return self._properties["files"]
-
-    @property
-    def files_dir(self) -> str | None:
-        """
-        Returns the directory path of the files in the NodeSpace.
-
-        Returns:
-          str: The directory path of the files in the NodeSpace.
-        """
-        if "files_dir" not in self._properties:
-            self._properties["files_dir"] = None
-        return self._properties["files_dir"]
-
-    @files_dir.setter
-    def files_dir(self, value: str):
-        """
-        Sets the directory path of the files in the NodeSpace.
-
-        Args:
-          value (str): The directory path to set.
-        """
-        self._properties["files_dir"] = value
-
-    def _check_files(self):
-        """remives all nonexisting files from the files dict"""
-        for filename in list(self.files.keys()):
-            if not os.path.exists(self.get_file_path(filename)):
-                self.remove_file(filename)
-
-    def delete_file(self, filename: str):
-        filepath = self.get_file_path(filename)
-        if filepath is not None and os.path.exists(filepath):
-            os.remove(filepath)
-
-    def set_property(self, key: str, value: Any):
+    def set_property(self, key: str, value: Any, secret=False):
         """
         Sets a property in the NodeSpace.
 
@@ -176,7 +133,33 @@ class NodeSpace(EventEmitterMixin):
         except Exception as e:
             raise ValueError(f"value must be json serializable: {e}")
 
-        self._properties[key] = value
+        if secret:
+            self.set_secret_property(key, value)
+        else:
+            self._properties[key] = value
+
+    def get_secret_property(self, key: str) -> Any:
+        """
+        Gets a secret property from the NodeSpace.
+
+        Args:
+          key (str): The key of the property to get.
+
+        Returns:
+          Any: The value of the property.
+        """
+        return self._secret_properties.get(key)
+
+    def set_secret_property(self, key: str, value: Any):
+        """
+        Sets a secret property in the
+        NodeSpace.
+
+        Args:
+          key (str): The key of the property to set.
+          value (Any): The value to set the property to.
+        """
+        self.set_property(key, value, secret=True)
 
     def get_property(self, key: str) -> Any:
         """
@@ -188,7 +171,7 @@ class NodeSpace(EventEmitterMixin):
         Returns:
           Any: The value of the property.
         """
-        return self._properties.get(key)
+        return self._properties.get(key, self._secret_properties.get(key))
 
     # endregion Properties
 
@@ -305,7 +288,6 @@ class NodeSpace(EventEmitterMixin):
         self._properties = data.get("prop", {})
         self.deserialize_nodes(data.get("nodes", []))
         self.deserialize_edges(data.get("edges", []))
-        self._check_files()
 
     def serialize(self) -> NodeSpaceJSON:
         """serialize serializes the nodespace to a dictionary
