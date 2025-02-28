@@ -159,7 +159,7 @@ class NodeSpace(EventEmitterMixin):
           key (str): The key of the property to set.
           value (Any): The value to set the property to.
         """
-        self.set_property(key, value, secret=True)
+        self._secret_properties[key] = value
 
     def get_property(self, key: str) -> Any:
         """
