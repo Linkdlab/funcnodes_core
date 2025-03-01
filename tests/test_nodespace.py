@@ -195,9 +195,17 @@ class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
         self.nodespace.set_secret_property("test", "test")
         ser = json.dumps(self.nodespace.serialize())
         assert "test" not in ser
+        assert self.nodespace.get_property("test") == "test"
         self.nodespace.set_property("test", "test", secret=True)
         ser = json.dumps(self.nodespace.serialize())
         assert "test" not in ser
         self.nodespace.set_property("test", "test")
         ser = json.dumps(self.nodespace.serialize())
         assert "test" in ser
+
+        self.nodespace.remove_property("test", ignore_public=True)
+
+        assert self.nodespace.get_property("test") == "test"
+        assert self.nodespace.get_secret_property("test") is None
+        self.nodespace.remove_property("test")
+        assert self.nodespace.get_property("test") is None

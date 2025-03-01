@@ -173,6 +173,20 @@ class NodeSpace(EventEmitterMixin):
         """
         return self._properties.get(key, self._secret_properties.get(key))
 
+    def remove_property(self, key: str, ignore_secret=False, ignore_public=False):
+        """
+        Removes a property from the NodeSpace.
+
+        Args:
+            key (str): The key of the property to remove.
+            ignore_secret (bool): Whether to ignore secret properties. Defaults to False.
+            ignore_public (bool): Whether to ignore public properties. Defaults to False.
+        """
+        if not ignore_secret:
+            self._secret_properties.pop(key, None)
+        if not ignore_public:
+            self._properties.pop(key, None)
+
     # endregion Properties
 
     # region serialization
