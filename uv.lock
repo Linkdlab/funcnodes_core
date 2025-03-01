@@ -418,7 +418,7 @@ wheels = [
 
 [[package]]
 name = "funcnodes-core"
-version = "0.3.46"
+version = "0.3.47"
 source = { editable = "." }
 dependencies = [
     { name = "dill" },
