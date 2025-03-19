@@ -42,10 +42,12 @@ class NodesConfig(TypedDict, total=False):
 class HandlerConfig(TypedDict, total=False):
     handlerclass: str
     options: dict
+    level: str
 
 
 class LoggingConfig(TypedDict, total=False):
     handler: Dict[str, HandlerConfig]
+    level: str
 
 
 class ConfigType(TypedDict, total=False):
@@ -370,10 +372,11 @@ def set_in_test(
         reload(_BASE_CONFIG_DIR)
 
         update_config({"logging": {"handler": {"file": False}}})
+        update_config({"logging": {"level": "DEBUG"}})
         # import here to avoid circular import
-        from ._logging import FUNCNODES_LOGGER, _update_logger_handlers, set_logging_dir  # noqa C0415 # pylint: disable=import-outside-toplevel
+        from ._logging import FUNCNODES_LOGGER, _update_logger, set_logging_dir  # noqa C0415 # pylint: disable=import-outside-toplevel
 
-        _update_logger_handlers(FUNCNODES_LOGGER)
+        _update_logger(FUNCNODES_LOGGER)
         set_logging_dir(os.path.join(_BASE_CONFIG_DIR, "logs"))
     finally:
         _CONFIG_CHANGED = True  # we change this to true, that the config is reloaded
