@@ -288,7 +288,7 @@ def update_render_options(options: RenderOptions):
     except json.JSONDecodeError:
         return
     deep_fill_dict(
-        FUNCNODES_RENDER_OPTIONS, options, merge_lists=True, unfify_lists=True
+        FUNCNODES_RENDER_OPTIONS, options, merge_lists=True, unify_lists=True
     )
 
 
