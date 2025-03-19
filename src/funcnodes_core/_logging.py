@@ -202,11 +202,27 @@ def _update_logger_handlers(
             hdlr.name = name
             hdlr.setFormatter(_formatter)
             logger.addHandler(hdlr)
+
+            if data.get("level", None):
+                hdlr.setLevel(data["level"])
+
     for child in getChildren(logger):
         _update_logger_handlers(
             child,
             # prev_dir=prev_dir
         )
+
+
+def _update_logger_level(logger: logging.Logger):
+    level = get_config().get("logging", {}).get("level", "INFO")
+    logger.setLevel(level)
+    for child in getChildren(logger):
+        _update_logger_level(child)
+
+
+def _update_logger(logger: logging.Logger):
+    _update_logger_level(logger)
+    _update_logger_handlers(logger)
 
 
 def get_logger(name: str, propagate: bool = True):
@@ -227,7 +243,7 @@ def get_logger(name: str, propagate: bool = True):
     sublogger = FUNCNODES_LOGGER.getChild(name)
     _overwrite_add_handler(sublogger)
     sublogger.propagate = propagate
-    _update_logger_handlers(sublogger)
+    _update_logger(sublogger)
 
     return sublogger
 
@@ -282,10 +298,8 @@ def set_log_format(fmt: str = DEFAULT_FORMAT, max_length: Optional[int] = None):
 
 
 FUNCNODES_LOGGER = logging.getLogger("funcnodes")
-
-FUNCNODES_LOGGER.setLevel(logging.INFO)
 _overwrite_add_handler(FUNCNODES_LOGGER)
-_update_logger_handlers(FUNCNODES_LOGGER)
+_update_logger(FUNCNODES_LOGGER)
 set_logging_dir(LOGGINGDIR)
 
 
