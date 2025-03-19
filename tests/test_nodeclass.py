@@ -325,6 +325,18 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
         ins2.deserialize(ser)
         self.assertEqual(ins2.get_property("pos"), (1, 2))
 
+    async def test_inti_call(self):
+        @fn.NodeDecorator("inti_call")
+        def func(a: int) -> int:
+            return a * 10
+
+        self.assertEqual(await func.inti_call(a=2, return_dict=True), {"out": 20})
+        self.assertEqual(await func.inti_call(a=2), 20)
+
+        self.assertEqual(await func.inti_call(raise_ready=False), fn.NoValue)
+        with self.assertRaises(fn.exceptions.NodeReadyError):
+            self.assertEqual(await func.inti_call(), 20)
+
 
 class NodeClassMetaTest(unittest.TestCase):
     """

@@ -19,7 +19,13 @@ from uuid import uuid4
 from weakref import WeakValueDictionary, ref
 
 from funcnodes_core.utils.wrapper import NoOverrideMixin, savemethod, saveproperty
-from .exceptions import NodeIdAlreadyExistsError
+from .exceptions import (
+    IONotFoundError,
+    InTriggerError,
+    NodeIdAlreadyExistsError,
+    NodeKeyError,
+    NodeReadyError,
+)
 from .io import (
     NodeInput,
     NodeOutput,
@@ -59,10 +65,6 @@ if TYPE_CHECKING:
 
 
 triggerlogger = get_logger("trigger")
-
-
-class IONotFoundError(KeyError):
-    pass
 
 
 class NodeTriggerError(Exception):
@@ -182,10 +184,6 @@ def _parse_nodeclass_io(node: Node):
                 **ser,
             )
         )
-
-
-class InTriggerError(Exception):
-    """Exception raised when attempting to trigger a node that is already in trigger."""
 
 
 class NodeMeta(ABCMeta):
@@ -1091,6 +1089,32 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         else:
             raise KeyError(f"No input or output named '{key}' found.")
 
+    @classmethod
+    async def inti_call(
+        cls,
+        /,
+        node_init_kwargs: Optional[Dict[str, Any]] = None,
+        return_dict: bool = False,
+        raise_ready: bool = True,
+        **kwargs,
+    ):
+        node = cls(**(node_init_kwargs or {}))
+        for k, v in kwargs.items():
+            node.inputs[k].value = v
+        if not node.ready() and raise_ready:
+            raise NodeReadyError(f"Node is not ready to trigger {node.status()}")
+        await node
+
+        if return_dict:
+            return {op.uuid: op.value for op in node.outputs.values()}
+
+        returns = tuple([op.value for op in node.outputs.values()])
+        if len(returns) == 0:
+            return None
+        if len(returns) == 1:
+            return returns[0]
+        return returns
+
 
 class NodeReadyState(TypedDict):
     """A dictionary containing the ready state of a node"""
@@ -1211,10 +1235,6 @@ def register_node(node_class: Type[Node]):
             )
 
     REGISTERED_NODES[node_id] = node_class
-
-
-class NodeKeyError(KeyError):
-    """Exception raised when a node with a given id is not registered."""
 
 
 def get_nodeclass(node_id: str) -> Type[Node]:

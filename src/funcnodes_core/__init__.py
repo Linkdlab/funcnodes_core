@@ -57,6 +57,8 @@ from . import decorator
 from exposedfunctionality import add_type, controlled_wrapper
 from ._setup import setup, AVAILABLE_MODULES
 
+from . import exceptions
+
 __all__ = [
     "NodeInput",
     "NodeOutput",
@@ -116,4 +118,5 @@ __all__ = [
     "nodemaker",
     "logging",
     "plugins",
+    "exceptions",
 ]
