@@ -236,8 +236,8 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
         expected = {
             "id": "aa",
             "io": {
-                "input": {"is_input": True, "value": 2},
-                "output": {"is_input": False, "value": 2},
+                "input": {"is_input": True, "value": 2, "emit_value_set": True},
+                "output": {"is_input": False, "value": 2, "emit_value_set": True},
             },
             "name": "DummyNode(aa)",
             "node_id": "dummy_node",

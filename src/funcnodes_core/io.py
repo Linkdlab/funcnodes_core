@@ -58,6 +58,7 @@ class NodeIOSerialization(
     render_options: IORenderOptions
     value_options: ValueOptions
     hidden: bool
+    emit_value_set: bool
 
 
 class NodeInputSerialization(NodeIOSerialization, total=False):
@@ -97,6 +98,7 @@ class FullNodeIOJSON(TypedDict):
     render_options: IORenderOptions
     value_options: ValueOptions
     hidden: bool
+    emit_value_set: bool
 
 
 class FullNodeInputJSON(FullNodeIOJSON):
@@ -293,9 +295,7 @@ NodeIOType = TypeVar("NodeIOType")
 class IOOptions(NodeIOSerialization, total=False):
     """Typing definition for Node Input/Output options."""
 
-    emit_value_set: bool
     on: Dict[str, Union[EventCallback, List[EventCallback]]]
-    hidden: bool
 
 
 class NodeInputOptions(IOOptions, NodeInputSerialization, total=False):
@@ -446,6 +446,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             value_options=self.value_options,
             value=self.value,
             hidden=self.hidden,
+            emit_value_set=self._emit_value_set,
         )
         if self._description is not None:
             ser["description"] = self._description
@@ -697,6 +698,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             render_options=self.render_options,
             value_options=self.value_options,
             hidden=self.hidden,
+            emit_value_set=self._emit_value_set,
         )
         if with_value:
             ser["value"] = self.value
