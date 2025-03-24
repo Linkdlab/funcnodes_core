@@ -150,10 +150,13 @@ class TestTriggerStack(unittest.IsolatedAsyncioTestCase):
 
         ins = prunetofial()
         with self.assertRaises(NodeTriggerError):
-            await ins
+            async with asyncio.timeout(0.5):
+                await ins
         o_IN_NODE_TEST = config._IN_NODE_TEST
         config._IN_NODE_TEST = False
-        await ins
+        # tiemoput = 0.1
+        async with asyncio.timeout(0.5):
+            await ins
 
         config._IN_NODE_TEST = o_IN_NODE_TEST
 

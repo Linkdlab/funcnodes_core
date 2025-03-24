@@ -945,6 +945,8 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             else:
                 pbar = self.progress(total=None, desc="triggering")
                 self.emit("triggerstart")
+
+            if self._pretrigger_delay > 0:
                 await asyncio.sleep(self._pretrigger_delay)
             # no more changes please
             self._trigger_open = False

@@ -8,12 +8,15 @@ from funcnodes_core.utils.nodeutils import (
 from funcnodes_core.nodemaker import NodeDecorator
 
 import funcnodes_core as fn
+import asyncio
 
 fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
 
 
 @NodeDecorator("dummy_nodefor testnodeutils")
-def identity(input: int) -> int:
+async def identity(input: int) -> int:
+    # add a little delay
+    await asyncio.sleep(fn.node.NodeConstants.TRIGGER_SPEED_FAST * 1)
     return input
 
 
@@ -72,7 +75,7 @@ class TestNodeUtils(unittest.IsolatedAsyncioTestCase):
         # Test that the progress is updated as expected.
         collected = []
 
-        def progress_callback(src, info):
+        def progress_callback(src, info, *args, **kwargs):
             collected.append(
                 info,
             )
