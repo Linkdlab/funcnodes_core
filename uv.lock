@@ -1,5 +1,4 @@
 version = 1
-revision = 1
 requires-python = ">=3.11"
 resolution-markers = [
     "sys_platform != 'emscripten'",
@@ -419,7 +418,7 @@ wheels = [
 
 [[package]]
 name = "funcnodes-core"
-version = "0.3.49"
+version = "0.3.50"
 source = { editable = "." }
 dependencies = [
     { name = "dill" },
