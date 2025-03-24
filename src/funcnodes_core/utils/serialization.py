@@ -291,6 +291,9 @@ class ByteEncoder:
 
     default_preview = False
 
+    class NoEncoderException(Exception):
+        pass
+
     @classmethod
     def add_encoder(cls, enc: byteencodertype, enc_cls: Optional[List[type]] = None):
         """
@@ -342,7 +345,7 @@ class ByteEncoder:
             cls.encoder_registry[_enc_cls].insert(0, enc)
 
     @classmethod
-    def encode(cls, obj, preview=False, seen=None) -> BytesEncdata:
+    def encode(cls, obj, preview=False, seen=None, json_fallback=True) -> BytesEncdata:
         """
         Recursively apply custom encoding to an object, using the encoders defined in JSONEncoder.
         """
@@ -378,13 +381,15 @@ class ByteEncoder:
                 )
 
             # Fallback to JSON representation
-            return BytesEncdata(
-                data=json.dumps(JSONEncoder.apply_custom_encoding(obj, preview)).encode(
-                    "utf-8", errors="replace"
-                ),
-                handeled=True,
-                mime="application/json",
-            )
+            if json_fallback:
+                return BytesEncdata(
+                    data=json.dumps(
+                        JSONEncoder.apply_custom_encoding(obj, preview)
+                    ).encode("utf-8", errors="replace"),
+                    handeled=True,
+                    mime="application/json",
+                )
+            raise ByteEncoder.NoEncoderException(f"No encoder for {type(obj)}")
         finally:
             # Remove this object from seen objects
             seen.remove(obj_id)
