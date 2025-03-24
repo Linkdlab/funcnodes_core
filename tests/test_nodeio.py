@@ -47,6 +47,7 @@ class TestNodeIO(unittest.TestCase):
                 "default": "<NoValue>",
                 "required": True,
                 "hidden": False,
+                "emit_value_set": True,
             },
         )
 
@@ -71,6 +72,7 @@ class TestNodeIO(unittest.TestCase):
                 "default": NoValue,
                 "required": True,
                 "hidden": False,
+                "emit_value_set": True,
             },
         )
 
@@ -78,12 +80,24 @@ class TestNodeIO(unittest.TestCase):
         serialized_input = self.input_1.serialize()
         self.assertEqual(
             serialized_input,
-            {"id": "input1", "is_input": True, "type": "Any", "value": NoValue},
+            {
+                "id": "input1",
+                "is_input": True,
+                "type": "Any",
+                "value": NoValue,
+                "emit_value_set": True,
+            },
         )
         serialized_output = self.output_1.serialize()
         self.assertEqual(
             serialized_output,
-            {"type": "Any", "id": "output1", "is_input": False, "value": NoValue},
+            {
+                "type": "Any",
+                "id": "output1",
+                "is_input": False,
+                "value": NoValue,
+                "emit_value_set": True,
+            },
         )
 
     def test_connect_input_to_output(self):

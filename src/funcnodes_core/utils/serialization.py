@@ -258,7 +258,7 @@ def bytes_handler(obj, preview=False):
     return Encdata(data=obj, handeled=False)
 
 
-JSONEncoder.add_encoder(bytes_handler)
+JSONEncoder.add_encoder(bytes_handler, enc_cls=[bytes])
 
 
 def dataclass_handler(obj, preview=False):
@@ -271,3 +271,138 @@ def dataclass_handler(obj, preview=False):
 
 
 JSONEncoder.add_encoder(dataclass_handler)
+
+
+@dataclasses.dataclass
+class BytesEncdata:
+    data: Union[bytes, Any]
+    handeled: bool = False
+    mime: Optional[str] = None
+
+
+byteencodertype = Callable[
+    [Any, bool],
+    BytesEncdata,
+]
+
+
+class ByteEncoder:
+    encoder_registry: Dict[type, List[byteencodertype]] = {}
+
+    default_preview = False
+
+    class NoEncoderException(Exception):
+        pass
+
+    @classmethod
+    def add_encoder(cls, enc: byteencodertype, enc_cls: Optional[List[type]] = None):
+        """
+        Adds a new encoder to the list of encoders.
+
+        Args:
+          enc (encodertyoe): A function that takes in an object and a boolean indicating whether
+            or not to use a default preview and returns a tuple containing the encoded object and a
+            boolean indicating whether or not the object was encoded.
+          enc_cls (Optional[List[type]]): A list of classes that the encoder should be applied to primarily.
+        Examples:
+          >>> def complex_encoder(obj, preview=False):
+          ...     if isinstance(obj, complex):
+          ...         return {"__complex__": True}, True
+          ...     return obj, False
+          >>> JSONEncoder.add_encoder(complex_encoder)
+        """
+        if enc_cls is None:
+            enc_cls = [object]
+        for _enc_cls in enc_cls:
+            if _enc_cls not in cls.encoder_registry:
+                cls.encoder_registry[_enc_cls] = []
+            cls.encoder_registry[_enc_cls].append(enc)
+
+    @classmethod
+    def prepend_encoder(
+        cls, enc: byteencodertype, enc_cls: Optional[List[type]] = None
+    ):
+        """
+        Adds a new encoder to the list of encoders.
+
+        Args:
+          enc (encodertyoe): A function that takes in an object and a boolean indicating whether
+            or not to use a default preview and returns a tuple containing the encoded object and
+            a boolean indicating whether or not the object was encoded.
+
+        Examples:
+          >>> def complex_encoder(obj, preview=False):
+          ...     if isinstance(obj, complex):
+          ...         return {"__complex__": True}, True
+          ...     return obj, False
+          >>> JSONEncoder.add_encoder(complex_encoder)
+        """
+        if enc_cls is None:
+            enc_cls = [object]
+        for _enc_cls in enc_cls:
+            if _enc_cls not in cls.encoder_registry:
+                cls.encoder_registry[_enc_cls] = []
+            cls.encoder_registry[_enc_cls].insert(0, enc)
+
+    @classmethod
+    def encode(cls, obj, preview=False, seen=None, json_fallback=True) -> BytesEncdata:
+        """
+        Recursively apply custom encoding to an object, using the encoders defined in JSONEncoder.
+        """
+        if seen is None:
+            seen = set()
+
+        obj_id = id(obj)
+        if obj_id in seen:
+            # Circular reference detected.
+            raise ValueError("Circular reference detected.")
+        # Mark this object as seen.
+        seen.add(obj_id)
+
+        try:
+            # Attempt to apply custom encodings
+            obj_type = type(obj)
+            for base in obj_type.__mro__:
+                encoders = cls.encoder_registry.get(base)
+                if encoders:
+                    for enc in encoders:
+                        # try:
+                        encres = enc(obj, preview)
+                        if encres.handeled:
+                            return encres
+
+            if isinstance(obj, str):
+                return BytesEncdata(
+                    data=(
+                        obj[:1000] + "..." if preview and len(obj) > 1000 else obj
+                    ).encode("utf-8", errors="replace"),
+                    handeled=True,
+                    mime="text",
+                )
+
+            # Fallback to JSON representation
+            if json_fallback:
+                return BytesEncdata(
+                    data=json.dumps(
+                        JSONEncoder.apply_custom_encoding(obj, preview)
+                    ).encode("utf-8", errors="replace"),
+                    handeled=True,
+                    mime="application/json",
+                )
+            raise ByteEncoder.NoEncoderException(f"No encoder for {type(obj)}")
+        finally:
+            # Remove this object from seen objects
+            seen.remove(obj_id)
+
+
+def bytes_bytes_handler(obj, preview=False):
+    """
+    Encodes bytes objects to base64 strings.
+    """
+    if isinstance(obj, bytes):
+        # Convert bytes to base64 string
+        return BytesEncdata(handeled=True, data=obj, mime="application/octet-stream")
+    return BytesEncdata(data=obj, handeled=False, mime="application/octet-stream")
+
+
+ByteEncoder.add_encoder(bytes_bytes_handler, enc_cls=[bytes])

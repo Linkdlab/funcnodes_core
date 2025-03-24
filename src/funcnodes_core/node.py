@@ -17,6 +17,8 @@ import asyncio
 import inspect
 from uuid import uuid4
 from weakref import WeakValueDictionary, ref
+import time
+from enum import IntFlag, auto
 
 from funcnodes_core.utils.wrapper import NoOverrideMixin, savemethod, saveproperty
 from .exceptions import (
@@ -285,6 +287,17 @@ NodeClassDictsKeys: List[NodeClassDictKeysValues] = [
 ]
 
 
+class NodeConstants:
+    TRIGGER_SPEED_FAST = 0.2
+    TRIGGER_SPEED_MEDIUM = 1
+
+
+class NodeFlags(IntFlag):
+    TRIGGER_SPEED_FAST = auto()
+    TRIGGER_SPEED_MEDIUM = auto()
+    TRIGGER_SPEED_SLOW = auto()
+
+
 class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
     """
     The base class for all nodes, making use of the custom metaclass `NodeMeta` to handle
@@ -400,6 +413,9 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         )
 
         self._disabled = False
+
+        self._rolling_tigger_time = NodeConstants.TRIGGER_SPEED_FAST * 1.1
+        self._trigger_speed_flag = NodeFlags.TRIGGER_SPEED_MEDIUM
         _parse_nodeclass_io(self)
         if trigger_on_create is None:
             self.trigger_on_create = self.default_trigger_on_create
@@ -907,7 +923,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
     # region triggering
 
     @savemethod
-    def __call__(self) -> asyncio.Task:
+    async def __call__(self) -> asyncio.Task:
         """
         Executes the node's function asynchronously and returns an asyncio.Task object.
         This method also handles the triggering of events before and after the function execution.
@@ -916,50 +932,71 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             asyncio.Task: The task object representing the asynchronous operation of the node's function.
         """
 
-        async def _wrapped_func():
-            """Wraps the node's function to handle the triggering of events before and after its execution."""
-            # set the trigger event
-            # just in case we set the flag again, this is the last time before the trigger
-            # that inupts can be changed and be respected
-            self._trigger_open = True
-            with self.progress(total=None, desc="triggering") as pbar:
-                await self.asynceventmanager.set_and_clear("triggered")
+        # set the trigger event
+        # just in case we set the flag again, this is the last time before the trigger
+        # that inupts can be changed and be respected
+        self._trigger_open = True
+        pbar = None
+        try:
+            await self.asynceventmanager.set_and_clear("triggered")
+
+            if self._trigger_speed_flag == NodeFlags.TRIGGER_SPEED_FAST:
+                self.emit("triggerfast")
+            else:
+                pbar = self.progress(total=None, desc="triggering")
                 self.emit("triggerstart")
+
+            if self._pretrigger_delay > 0:
                 await asyncio.sleep(self._pretrigger_delay)
-                # no more changes please
-                self._trigger_open = False
+            # no more changes please
+            self._trigger_open = False
 
-                kwargs = {
-                    ip.uuid: ip.value for ip in self._inputs if ip.value is not NoValue
-                }
+            kwargs = {
+                ip.uuid: ip.value for ip in self._inputs if ip.value is not NoValue
+            }
 
-                err = None
-                if "_triggerinput" in kwargs:
-                    del kwargs["_triggerinput"]
-                try:
-                    # run the function
-                    ans = await self.func(**kwargs)
-                    # reset the inputs if requested
-                    if self.reset_inputs_on_trigger:
-                        for ip in self._inputs:
-                            ip.set_value(ip.default, does_trigger=False)
-                    # pbar.update(1)
+            err = None
+            _tigger_start_time = time.perf_counter()
+            if "_triggerinput" in kwargs:
+                del kwargs["_triggerinput"]
+            try:
+                # run the function
+                ans = await self.func(**kwargs)
+                # reset the inputs if requested
+                if self.reset_inputs_on_trigger:
+                    for ip in self._inputs:
+                        ip.set_value(ip.default, does_trigger=False)
+                # pbar.update(1)
+                _trigger_time = time.perf_counter() - _tigger_start_time
+                self._rolling_tigger_time = (
+                    _trigger_time
+                    if self._rolling_tigger_time is None
+                    else (0.9 * self._rolling_tigger_time + 0.1 * _trigger_time)
+                )
+                if pbar is not None:
                     pbar.set_description_str("idle", refresh=False)
-                except Exception as e:
-                    err = e
+            except Exception as e:
+                err = e
 
-            self.emit("triggerdone")
+            if self._trigger_speed_flag != NodeFlags.TRIGGER_SPEED_FAST:
+                self.emit("triggerdone")
 
+            if self._rolling_tigger_time <= NodeConstants.TRIGGER_SPEED_FAST:
+                self._trigger_speed_flag = NodeFlags.TRIGGER_SPEED_FAST
+            elif self._rolling_tigger_time <= NodeConstants.TRIGGER_SPEED_MEDIUM:
+                self._trigger_speed_flag = NodeFlags.TRIGGER_SPEED_MEDIUM
+            else:
+                self._trigger_speed_flag = NodeFlags.TRIGGER_SPEED_SLOW
             # set the triggerdone event
-            await self.asynceventmanager.set_and_clear("triggerdone")
+
             if err:
                 self.error(NodeTriggerError.from_error(err))
                 ans = err
             return ans
-
-        # create the task
-        task = asyncio.create_task(_wrapped_func())
-        return task
+        finally:
+            if pbar is not None:
+                pbar.close()
+            await self.asynceventmanager.set_and_clear("triggerdone")
 
     def trigger_if_requested(self, triggerstack: Optional[TriggerStack] = None) -> bool:
         """
@@ -1060,7 +1097,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         triggerlogger.debug(f"triggering {self}")
         self._trigger_open = True
         self._triggerstack = triggerstack
-        self._triggerstack.append(self())
+        self._triggerstack.append(asyncio.create_task(self()))
         self._requests_trigger = False
         return self._triggerstack
 
