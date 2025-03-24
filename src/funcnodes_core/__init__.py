@@ -1,4 +1,4 @@
-__version__ = "0.3.49"
+__version__ = "0.3.50"
 
 from .io import (
     NodeInput,
@@ -40,7 +40,7 @@ from . import config
 
 
 from .utils import special_types as types
-from .utils.serialization import JSONDecoder, JSONEncoder, Encdata
+from .utils.serialization import JSONDecoder, JSONEncoder, Encdata, ByteEncoder
 from .utils.nodeutils import get_deep_connected_nodeset, run_until_complete
 
 from .utils.wrapper import signaturewrapper
@@ -85,6 +85,7 @@ __all__ = [
     "find_shelf",
     "JSONEncoder",
     "JSONDecoder",
+    "ByteEncoder",
     "NodeClassNotFoundError",
     "FUNCNODES_LOGGER",
     "get_logger",
