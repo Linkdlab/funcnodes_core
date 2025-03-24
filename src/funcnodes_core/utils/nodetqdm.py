@@ -75,9 +75,11 @@ class NodeTqdm(tqdm):
         self,
         *args,
         broadcast_func: Optional[Callable[[TqdmState], None]] = None,
+        default_display: Optional[bool] = False,
         **kwargs,
     ):
         self.broadcast_func = broadcast_func
+        self.default_display = default_display or broadcast_func is None
         super().__init__(*args, **kwargs)
 
     @method_deprecated_decorator()
@@ -87,7 +89,8 @@ class NodeTqdm(tqdm):
     def display(self, msg=None, pos=None):
         # This method is called by tqdm according to its internal logic,
         # respecting mininterval, miniters, etc.
-        super().display(msg=msg, pos=pos)
+        if self.default_display:
+            super().display(msg=msg, pos=pos)
         self._broadcast_state()
 
     def _broadcast_state(self):
