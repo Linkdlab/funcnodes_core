@@ -99,12 +99,20 @@ class AsyncEventManager:
             event (str): The name of the event to signal and then clear.
             delta (float): The amount of time to wait before clearing the event in seconds, defaults to 0.
         """
+        async with (
+            self._lock
+        ):  # Ensure thread-safe access to the _async_events dictionary.
+            if event not in self._async_events:
+                self._async_events[event] = asyncio.Event()
 
-        await self.set(event)  # Set the event to wake up all waiting coroutines.
-        await asyncio.sleep(
-            max(0, delta)
-        )  # Allow other tasks to run, ensuring that they see the event.
-        await self.clear(event)  # Clear the event so it can be waited on again.
+            self._async_events[event].set()
+
+            if delta > 0:
+                await asyncio.sleep(
+                    max(0, delta)
+                )  # Allow other tasks to run, ensuring that they see the event.
+
+            self._async_events[event].clear()
 
     async def remove_event(self, event: str) -> None:
         """
