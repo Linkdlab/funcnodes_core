@@ -40,7 +40,13 @@ from . import config
 
 
 from .utils import special_types as types
-from .utils.serialization import JSONDecoder, JSONEncoder, Encdata, ByteEncoder
+from .utils.serialization import (
+    JSONDecoder,
+    JSONEncoder,
+    Encdata,
+    ByteEncoder,
+    BytesEncdata,
+)
 from .utils.nodeutils import get_deep_connected_nodeset, run_until_complete
 
 from .utils.wrapper import signaturewrapper
@@ -105,6 +111,7 @@ __all__ = [
     "decorator",
     "setup",
     "Encdata",
+    "BytesEncdata",
     "AVAILABLE_MODULES",
     "NodeTriggerError",
     "get_deep_connected_nodeset",
