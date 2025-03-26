@@ -2,6 +2,7 @@ from typing import Callable, Any, Union, Tuple, List, Dict, Optional
 import json
 import base64
 import weakref
+import struct
 
 import dataclasses
 
@@ -377,8 +378,37 @@ class ByteEncoder:
                         obj[:1000] + "..." if preview and len(obj) > 1000 else obj
                     ).encode("utf-8", errors="replace"),
                     handeled=True,
-                    mime="text",
+                    mime="text/plain",
                 )
+
+            if isinstance(obj, bytes):
+                return BytesEncdata(
+                    data=obj, handeled=True, mime="application/octet-stream"
+                )
+
+            if isinstance(obj, int):
+                return BytesEncdata(
+                    data=struct.pack("q", obj),
+                    handeled=True,
+                    mime="application/fn.struct.q",
+                )
+
+            if isinstance(obj, float):
+                return BytesEncdata(
+                    data=struct.pack("d", obj),
+                    handeled=True,
+                    mime="application/fn.struct.d",
+                )
+
+            if isinstance(obj, bool):
+                return BytesEncdata(
+                    data=struct.pack("?", obj),
+                    handeled=True,
+                    mime="application/fn.struct.?",
+                )
+
+            if obj is None:
+                return BytesEncdata(data=b"", handeled=True, mime="application/fn.null")
 
             # Fallback to JSON representation
             if json_fallback:

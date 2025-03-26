@@ -380,8 +380,8 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
 
         if uuid is None and id is not None:
             uuid = id
-        self._uuid = uuid or f"_{uuid4().hex}"
-        self._name = name or self._uuid
+        self._uuid = (uuid or f"_{uuid4().hex}").strip()
+        self._name = (name or self._uuid).strip()
         self._description = description
         self._value: Union[NodeIOType, NoValueType] = NoValue
 
@@ -421,7 +421,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
 
     def deserialize(self, data: NodeIOSerialization) -> None:
         if "name" in data:
-            self._name = data["name"]
+            self._name = data["name"].strip() or data.get("id", self._uuid)
         if "description" in data:
             self._description = data["description"]
         if "id" in data:
@@ -482,7 +482,7 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
         # if None or empty fall back to uuid
         if name is None:
             name = self.uuid
-        name = str(name)
+        name = str(name).strip()
         if len(name) == 0:
             name = self.uuid
         self._name = name
