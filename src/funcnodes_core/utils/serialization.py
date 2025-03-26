@@ -388,16 +388,16 @@ class ByteEncoder:
 
             if isinstance(obj, int):
                 return BytesEncdata(
-                    data=struct.pack("q", obj),
+                    data=struct.pack("!q", obj),
                     handeled=True,
-                    mime="application/fn.struct.q",
+                    mime="application/fn.struct.!q",
                 )
 
             if isinstance(obj, float):
                 return BytesEncdata(
-                    data=struct.pack("d", obj),
+                    data=struct.pack("!d", obj),
                     handeled=True,
-                    mime="application/fn.struct.d",
+                    mime="application/fn.struct.!d",
                 )
 
             if isinstance(obj, bool):
