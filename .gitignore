@@ -325,4 +325,4 @@ requirements.txt
 
 /.licensecheck
 /src/*.egg-info
-/funcnodesprofile.pstat
+/testouts
