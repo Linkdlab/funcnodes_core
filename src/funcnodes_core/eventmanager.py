@@ -46,6 +46,13 @@ class AsyncEventManager:
         """
         return self._obj()
 
+    async def _get_event(self, event: str) -> asyncio.Event:
+        """
+        Retrieve the existing asyncio.Event for the given key or create a new one.
+        This operation is synchronous and does not yield, so it is safe from interleaving.
+        """
+        return self._async_events.setdefault(event, asyncio.Event())
+
     async def wait(self, event: str) -> None:
         """
         Waits for the event to be set before continuing.
@@ -53,14 +60,7 @@ class AsyncEventManager:
         Args:
             event (str): The name of the event to wait for.
         """
-        async with (
-            self._lock
-        ):  # Ensure thread-safe access to the _async_events dictionary.
-            if event not in self._async_events:
-                self._async_events[event] = asyncio.Event()
-            pass
-
-        await self._async_events[event].wait()
+        await (await self._get_event(event)).wait()
 
     async def set(self, event: str) -> None:
         """
@@ -69,13 +69,7 @@ class AsyncEventManager:
         Args:
             event (str): The name of the event to set.
         """
-        async with (
-            self._lock
-        ):  # Ensure thread-safe access to the _async_events dictionary.
-            if event not in self._async_events:
-                self._async_events[event] = asyncio.Event()
-
-            self._async_events[event].set()
+        (await self._get_event(event)).set()
 
     async def clear(self, event: str) -> None:
         """
@@ -84,12 +78,7 @@ class AsyncEventManager:
         Args:
             event (str): The name of the event to clear.
         """
-        async with (
-            self._lock
-        ):  # Ensure thread-safe access to the _async_events dictionary.
-            if event in self._async_events:
-                self._async_events[event].clear()
-            pass
+        (await self._get_event(event)).clear()
 
     async def set_and_clear(self, event: str, delta: float = 0) -> None:
         """
@@ -99,20 +88,15 @@ class AsyncEventManager:
             event (str): The name of the event to signal and then clear.
             delta (float): The amount of time to wait before clearing the event in seconds, defaults to 0.
         """
-        async with (
-            self._lock
-        ):  # Ensure thread-safe access to the _async_events dictionary.
-            if event not in self._async_events:
-                self._async_events[event] = asyncio.Event()
 
-            self._async_events[event].set()
+        await self.set(event)  # Set the event immediately.
 
-            if delta > 0:
-                await asyncio.sleep(
-                    max(0, delta)
-                )  # Allow other tasks to run, ensuring that they see the event.
+        if delta > 0:
+            await asyncio.sleep(
+                max(0, delta)
+            )  # Allow other tasks to run, ensuring that they see the event.
 
-            self._async_events[event].clear()
+        await self.clear(event)  # Clear the event after the specified delay.
 
     async def remove_event(self, event: str) -> None:
         """
@@ -121,10 +105,7 @@ class AsyncEventManager:
         Args:
             event (str): The name of the event to remove.
         """
-        async with self._lock:
-            if event in self._async_events:
-                del self._async_events[event]
-            pass
+        self._async_events.pop(event, None)
 
 
 class MessageInArgs(dict):

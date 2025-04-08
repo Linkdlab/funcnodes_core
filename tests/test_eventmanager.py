@@ -76,7 +76,7 @@ class TestAsyncEventManager(unittest.IsolatedAsyncioTestCase):
         await self.event_manager.clear(event_name)
         self.assertFalse(self.event_manager._async_events[event_name].is_set())
         await self.event_manager.clear("unknwon")
-        self.assertNotIn("unknwon", self.event_manager._async_events)
+        self.assertIn("unknwon", self.event_manager._async_events)
 
     async def test_set_and_clear_event(self):
         """
