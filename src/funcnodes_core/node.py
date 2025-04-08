@@ -325,12 +325,14 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         default=None,
         required=False,
         hidden=True,
+        emit_value_set=False,
     )
     _triggeroutput = NodeOutput(
         uuid="_triggeroutput",
         name="➡",
         description="Node was triggered",
         hidden=True,
+        emit_value_set=False,
     )
 
     _class_io_serialized: Dict[str, NodeIOSerialization]
@@ -970,9 +972,9 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             # no more changes please
             self._trigger_open = False
 
-            kwargs = {
-                ip.uuid: ip.value for ip in self._inputs if ip.value is not NoValue
-            }
+            # split into two assignes that ip.value does not have to be called twice
+            kwargs = {ip.uuid: ip.value for ip in self._inputs}
+            kwargs = {k: v for k, v in kwargs.items() if v is not NoValue}
 
             err = None
             _tigger_start_time = time.perf_counter()
