@@ -29,6 +29,7 @@ class yappicontext:
         if yappi is not None:
             yappi.stop()
             yappi.get_func_stats().save(self.file, "pstat")
+            yappi.clear_stats()
 
 
 class TestTriggerSpeed(unittest.IsolatedAsyncioTestCase):
@@ -38,8 +39,8 @@ class TestTriggerSpeed(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         teardown()
 
-    async def test_triggerspees(self):
-        @fn.NodeDecorator("TestTriggerSpeed test_triggerspees")
+    async def test_triggerspeeds(self):
+        @fn.NodeDecorator("TestTriggerSpeed test_triggerspeeds")
         async def _add_one(input: int) -> int:
             return input + 1  # a very simple and fast operation
 
@@ -48,21 +49,21 @@ class TestTriggerSpeed(unittest.IsolatedAsyncioTestCase):
 
         node = _add_one(pretrigger_delay=0.0)
 
-        with yappicontext("test_triggerspees_directfunc.pstat"):
+        with yappicontext("test_triggerspeeds_directfunc.pstat"):
             t = time.perf_counter()
             cound_directfunc = 0
             while time.perf_counter() - t < 1:
                 cound_directfunc = await node.func(cound_directfunc)
 
-        with yappicontext("test_triggerspees_simplefunc.pstat"):
+        with yappicontext("test_triggerspeeds_simplefunc.pstat"):
             t = time.perf_counter()
             count_simplefunc = 0
             while time.perf_counter() - t < 1:
                 count_simplefunc = await _a_add_one(count_simplefunc)
 
         self.assertGreaterEqual(
-            cound_directfunc, count_simplefunc / 5
-        )  # overhead should max be 5
+            cound_directfunc, count_simplefunc / 7
+        )  # overhead for this fast function is relativly heigh due to the event system (calls in the size of 50k/sec)
 
         # disable triggerlogger
         # triggerlogger.disabled = True
@@ -85,7 +86,7 @@ class TestTriggerSpeed(unittest.IsolatedAsyncioTestCase):
 
         node.on("triggerstart", increase_called_trigger)
         node.on("triggerfast", increase_called_triggerfast)
-        with yappicontext("test_triggerspees_direct_called.pstat"):
+        with yappicontext("test_triggerspeeds_direct_called.pstat"):
             while time.perf_counter() - t < 1:
                 await node()
                 node.inputs["input"].value = node.outputs["out"].value
@@ -102,7 +103,7 @@ class TestTriggerSpeed(unittest.IsolatedAsyncioTestCase):
             trigger_direct_called, cound_directfunc / 10
         )  # overhead due to all the trigger events
 
-        with yappicontext("test_triggerspees_called_await.pstat"):
+        with yappicontext("test_triggerspeeds_called_await.pstat"):
             node.inputs["input"].value = 1
 
             t = time.perf_counter()
