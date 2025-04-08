@@ -389,7 +389,9 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         super().__init__()
         self._properties = properties if isinstance(properties, dict) else {}
         self._inputs: List[NodeInput] = []
+        self._inputs_dict: Optional[Dict[str, NodeInput]] = None
         self._outputs: List[NodeOutput] = []
+        self._outputs_dict: Optional[Dict[str, NodeOutput]] = None
         self._triggerstack: Optional[TriggerStack] = None
         # flag whether the trigger has started but still not read the ios
         self._trigger_open = False
@@ -675,7 +677,10 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         """returns a dictionary of the outputs of this node
         in the format {output.uuid:output}
         """
-        return {op.uuid: op for op in self._outputs}
+        if self._outputs_dict is None:
+            self._outputs_dict = {op.uuid: op for op in self._outputs}
+
+        return self._outputs_dict
 
     @saveproperty
     def o(self) -> Dict[str, NodeOutput]:
@@ -687,7 +692,9 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         """returns a dictionary of the inputs of this node
         in the format {input.uuid:input}
         """
-        return {ip.uuid: ip for ip in self._inputs}
+        if self._inputs_dict is None:
+            self._inputs_dict = {ip.uuid: ip for ip in self._inputs}
+        return self._inputs_dict
 
     @saveproperty
     def i(self) -> Dict[str, NodeInput]:
@@ -811,6 +818,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         node_input.on("*", self.on_nodeio_event)
         self._inputs.append(node_input)
         node_input.node = self
+        self._inputs_dict = None
 
     def remove_input(self, node_input: NodeInput):
         """
@@ -826,6 +834,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             raise ValueError(f"Input with id {node_input.uuid} not found")
         node_input.off("*", self.on_nodeio_event)
         self._inputs.remove(node_input)
+        self._inputs_dict = None
 
     def add_output(self, node_output: NodeOutput):
         """
@@ -843,6 +852,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         node_output.on("*", self.on_nodeio_event)
         node_output.node = self
         self._outputs.append(node_output)
+        self._outputs_dict = None
 
     def remove_output(self, node_output: NodeOutput):
         """
@@ -858,6 +868,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             raise ValueError(f"Output with id {node_output.uuid} not found")
         node_output.off("*", self.on_nodeio_event)
         self._outputs.remove(node_output)
+        self._outputs_dict = None
 
     def on_nodeio_event(self, event: str, src: NodeInput | NodeOutput, **data):
         """
