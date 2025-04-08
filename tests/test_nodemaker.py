@@ -59,8 +59,8 @@ class TestNodeClassMaker(unittest.IsolatedAsyncioTestCase):
 
         node = nodecls()
         self.assertEqual(node.node_id, "test_node_decorator_registers_node_class")
-        self.assertEqual(len(node._inputs), 2)  # input1 and trigger
-        self.assertEqual(len(node._outputs), 1)
+        self.assertEqual(len(node._inputs), 2)  # input1 and _triggerinput
+        self.assertEqual(len(node._outputs), 2)  # out and _triggeroutput
 
         self.assertEqual(node.get_input("input1").name, "input1")
         self.assertEqual(node.get_output("out").name, "out")
@@ -102,7 +102,7 @@ class TestNodeClassMaker(unittest.IsolatedAsyncioTestCase):
             node.node_id, "test_node_decorator_registers_node_class_no_outs"
         )
         self.assertEqual(node.get_input("input1").name, "input1")
-        self.assertEqual(len(node._outputs), 0)
+        self.assertEqual(len(node._outputs), 1)  # _triggeroutput
 
         node.get_input("input1").value = 1
         await node

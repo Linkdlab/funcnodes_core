@@ -58,8 +58,12 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
         self.assertIn("test_input", test_node.inputs)
         self.assertIn("test_output", test_node.outputs)
 
-        self.assertEqual(len(test_node.inputs), 3)  # input and test_input and trigger
-        self.assertEqual(len(test_node.outputs), 2)
+        self.assertEqual(
+            len(test_node.inputs), 3
+        )  # input and test_input and _triggerinput
+        self.assertEqual(
+            len(test_node.outputs), 3
+        )  # output and test_output and _triggeroutput
 
     async def test_node_ready_to_trigger(self):
         """Test if the node correctly reports its readiness to trigger."""
@@ -147,7 +151,13 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
                         "has_node": True,
                         "has_value": False,
                         "ready": True,
-                    }
+                    },
+                    "_triggeroutput": {
+                        "connected": False,
+                        "has_node": True,
+                        "has_value": False,
+                        "ready": True,
+                    },
                 },
                 "ready_state": {
                     "inputs": {
@@ -192,7 +202,7 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
 
     async def test__init__subclass(self):
         self.assertEqual(
-            len(DummyNode._class_io_serialized), 3, DummyNode._class_io_serialized
+            len(DummyNode._class_io_serialized), 4, DummyNode._class_io_serialized
         )
 
     async def test_serialize_nodeclass(self):
@@ -330,7 +340,14 @@ class TestNodeClass(unittest.IsolatedAsyncioTestCase):
         def func(a: int) -> int:
             return a * 10
 
-        self.assertEqual(await func.inti_call(a=2, return_dict=True), {"out": 20})
+        dictout = await func.inti_call(a=2, return_dict=True)
+        self.assertEqual(
+            dictout,
+            {
+                "out": 20,
+                "_triggeroutput": dictout["_triggeroutput"],
+            },
+        )
         self.assertEqual(await func.inti_call(a=2), 20)
 
         self.assertEqual(await func.inti_call(raise_ready=False), fn.NoValue)

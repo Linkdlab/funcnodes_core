@@ -326,6 +326,12 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         required=False,
         hidden=True,
     )
+    _triggeroutput = NodeOutput(
+        uuid="_triggeroutput",
+        name="➡",
+        description="Node was triggered",
+        hidden=True,
+    )
 
     _class_io_serialized: Dict[str, NodeIOSerialization]
 
@@ -473,7 +479,9 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
                 if ip.uuid != "_triggerinput"
             ],
             outputs=[
-                op.serialize_class() for op in _get_nodeclass_outputs(cls).values()
+                op.serialize_class()
+                for op in _get_nodeclass_outputs(cls).values()
+                if op.uuid != "_triggeroutput"
             ],
             description=cls.description,
             node_name=getattr(cls, "node_name", cls.__name__),
@@ -565,7 +573,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         )
 
         for iod in self._inputs + self._outputs:
-            if iod.uuid == "_triggerinput":
+            if iod.uuid == "_triggerinput" or iod.uuid == "_triggeroutput":
                 continue
             ioser = dict(iod.serialize(drop=drop))
             if drop:
@@ -973,6 +981,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
                     if self._rolling_tigger_time is None
                     else (0.9 * self._rolling_tigger_time + 0.1 * _trigger_time)
                 )
+                self.outputs["_triggeroutput"].set_value(time.time())
                 if pbar is not None:
                     pbar.set_description_str("idle", refresh=False)
             except Exception as e:
@@ -1143,9 +1152,11 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         await node
 
         if return_dict:
-            return {op.uuid: op.value for op in node.outputs.values()}
+            return {op.uuid: op.value for op in node._outputs}
 
-        returns = tuple([op.value for op in node.outputs.values()])
+        returns = tuple(
+            [op.value for op in node._outputs if op._uuid != "_triggeroutput"]
+        )
         if len(returns) == 0:
             return None
         if len(returns) == 1:
