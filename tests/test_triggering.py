@@ -4,7 +4,10 @@ import time
 import funcnodes_core as fn
 from funcnodes_core.testing import setup, teardown
 
-import yappi
+try:
+    import yappi
+except ImportError:
+    yappi = None
 
 
 class TestTriggerSpeed(unittest.IsolatedAsyncioTestCase):
@@ -75,8 +78,9 @@ class TestTriggerSpeed(unittest.IsolatedAsyncioTestCase):
             trigger_direct_called, cound_directfunc / 10
         )  # overhead due to all the trigger events
 
-        yappi.set_clock_type("WALL")
-        yappi.start()
+        if yappi is not None:
+            yappi.set_clock_type("WALL")
+            yappi.start()
         try:
             node.inputs["input"].value = 1
 
@@ -98,5 +102,6 @@ class TestTriggerSpeed(unittest.IsolatedAsyncioTestCase):
             )
 
         finally:
-            yappi.stop()
-            yappi.get_func_stats().save("funcnodesprofile.pstat", "pstat")
+            if yappi is not None:
+                yappi.stop()
+                yappi.get_func_stats().save("funcnodesprofile.pstat", "pstat")
