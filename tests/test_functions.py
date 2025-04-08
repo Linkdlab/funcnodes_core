@@ -1,4 +1,4 @@
-import unittest
+import pytest
 import asyncio
 from funcnodes_core.utils.functions import (
     make_run_in_new_thread,
@@ -62,382 +62,419 @@ async def process_decorated_async_function(x: int) -> int:
     return x * 2
 
 
-class TestExecutorWrapper(unittest.IsolatedAsyncioTestCase):
-    async def test_sync_function_in_thread(self):
-        """Test running a synchronous function in a thread."""
+@pytest.mark.asyncio
+async def test_sync_function_in_thread():
+    """Test running a synchronous function in a thread."""
 
-        wrapper = make_run_in_new_thread(sync_function)
-        result = await wrapper(5)
-        self.assertEqual(result, 10)
-        wrapper.shutdown()
+    wrapper = make_run_in_new_thread(sync_function)
+    result = await wrapper(5)
+    assert result == 10
+    wrapper.shutdown()
 
-    async def test_sync_function_in_process(self):
-        """Test running a synchronous function in a process."""
 
-        wrapper = make_run_in_new_process(sync_function)
-        result = await wrapper(5)
-        self.assertEqual(result, 10)
-        wrapper.shutdown()
+@pytest.mark.asyncio
+async def test_sync_function_in_process():
+    """Test running a synchronous function in a process."""
 
-    async def test_async_function_in_thread(self):
-        """Test running an asynchronous function in a thread."""
+    wrapper = make_run_in_new_process(sync_function)
+    result = await wrapper(5)
+    assert result == 10
+    wrapper.shutdown()
 
-        wrapper = make_run_in_new_thread(async_function)
 
-        result = await wrapper(5)
-        self.assertEqual(result, 10)
-        wrapper.shutdown()
+@pytest.mark.asyncio
+async def test_async_function_in_thread():
+    """Test running an asynchronous function in a thread."""
 
-    async def test_async_function_in_process(self):
-        """Test running an asynchronous function in a process."""
+    wrapper = make_run_in_new_thread(async_function)
 
-        wrapper = make_run_in_new_process(async_function)
+    result = await wrapper(5)
+    assert result == 10
+    wrapper.shutdown()
 
-        result = await wrapper(5)
-        self.assertEqual(result, 10)
-        wrapper.shutdown()
 
-    async def test_lambda_function_in_thread(self):
-        """Test running a lambda function in a thread."""
-        wrapper = make_run_in_new_thread(lambda x: x * 2)
+@pytest.mark.asyncio
+async def test_async_function_in_process():
+    """Test running an asynchronous function in a process."""
 
-        result = await wrapper(5)
-        self.assertEqual(result, 10)
-        wrapper.shutdown()
+    wrapper = make_run_in_new_process(async_function)
 
-    async def test_lambda_function_in_process(self):
-        """Test running a lambda function in a process."""
-        wrapper = make_run_in_new_process(lambda x: x * 2)
+    result = await wrapper(5)
+    assert result == 10
+    wrapper.shutdown()
 
-        result = await wrapper(5)
-        self.assertEqual(result, 10)
-        wrapper.shutdown()
 
-    async def test_failing_function_in_thread(self):
-        """Test a failing function in a thread."""
+@pytest.mark.asyncio
+async def test_lambda_function_in_thread():
+    """Test running a lambda function in a thread."""
+    wrapper = make_run_in_new_thread(lambda x: x * 2)
 
-        wrapper = make_run_in_new_thread(failing_function)
+    result = await wrapper(5)
+    assert result == 10
+    wrapper.shutdown()
 
-        with self.assertRaises(ValueError):
-            await wrapper(5)
-        wrapper.shutdown()
 
-    async def test_failing_function_in_process(self):
-        """Test a failing function in a process."""
+@pytest.mark.asyncio
+async def test_lambda_function_in_process():
+    """Test running a lambda function in a process."""
+    wrapper = make_run_in_new_process(lambda x: x * 2)
 
-        wrapper = make_run_in_new_process(failing_function)
+    result = await wrapper(5)
+    assert result == 10
+    wrapper.shutdown()
 
-        with self.assertRaises(ValueError):
-            await wrapper(5)
-        wrapper.shutdown()
 
-    async def test_make_sync_if_needed_on_async_function(self):
-        """Test make_sync_if_needed on an asynchronous function."""
+@pytest.mark.asyncio
+async def test_failing_function_in_thread():
+    """Test a failing function in a thread."""
 
-        l_sync_function = make_sync_if_needed(async_function)
-        result = l_sync_function(5)
-        self.assertEqual(result, 10)
+    wrapper = make_run_in_new_thread(failing_function)
 
-    async def test_make_async_if_needed_on_sync_function(self):
-        """Test make_async_if_needed on a synchronous function."""
+    with pytest.raises(ValueError):
+        await wrapper(5)
+    wrapper.shutdown()
 
-        l_async_function = make_async_if_needed(sync_function)
 
-        result = await l_async_function(5)
-        self.assertEqual(result, 10)
+@pytest.mark.asyncio
+async def test_failing_function_in_process():
+    """Test a failing function in a process."""
 
-    async def test_make_async_if_needed_on_async_function(self):
-        """Test make_async_if_needed on an already asynchronous function."""
+    wrapper = make_run_in_new_process(failing_function)
 
-        l_async_function = make_async_if_needed(async_function)
+    with pytest.raises(ValueError):
+        await wrapper(5)
+    wrapper.shutdown()
 
-        result = await l_async_function(5)
-        self.assertEqual(result, 10)
 
-    async def test_make_sync_if_needed_on_sync_function(self):
-        """Test make_sync_if_needed on an already synchronous function."""
+@pytest.mark.asyncio
+async def test_make_sync_if_needed_on_async_function():
+    """Test make_sync_if_needed on an asynchronous function."""
 
-        l_sync_function = make_sync_if_needed(sync_function)
-        result = l_sync_function(5)
-        self.assertEqual(result, 10)
+    l_sync_function = make_sync_if_needed(async_function)
+    result = l_sync_function(5)
+    assert result == 10
 
-    async def test_make_sync_if_needed_on_mixed_functions(self):
-        """Test make_sync_if_needed on a mix of coroutine and non-coroutine functions."""
 
-        async_func = make_sync_if_needed(async_function)
-        sync_func = make_sync_if_needed(sync_function)
+@pytest.mark.asyncio
+async def test_make_async_if_needed_on_sync_function():
+    """Test make_async_if_needed on a synchronous function."""
 
-        result_async = async_func(5)
-        result_sync = sync_func(5)
+    l_async_function = make_async_if_needed(sync_function)
 
-        self.assertEqual(result_async, 10)
-        self.assertEqual(result_sync, 10)
+    result = await l_async_function(5)
+    assert result == 10
 
-    async def test_nested_executors(self):
-        """Test running an executor inside another executor."""
 
-        wrapper_outer = make_run_in_new_thread(nested_function)
-        result = await wrapper_outer(5)
-        self.assertEqual(result, 10)
-        wrapper_outer.shutdown()
+@pytest.mark.asyncio
+async def test_make_async_if_needed_on_async_function():
+    """Test make_async_if_needed on an already asynchronous function."""
 
-    async def test_call_sync_with_sync_function(self):
-        """Test call_sync with a synchronous function."""
-        result = call_sync(sync_function, 5)
-        self.assertEqual(result, 10)
+    l_async_function = make_async_if_needed(async_function)
 
-    async def test_call_sync_with_async_function(self):
-        """Test call_sync with an asynchronous function."""
-        result = call_sync(async_function, 5)
-        self.assertEqual(result, 10)
+    result = await l_async_function(5)
+    assert result == 10
 
-    async def test_call_sync_with_failing_async_function(self):
-        """Test call_sync with an asynchronous function that fails."""
 
-        async def failing_async_function(x: int) -> int:
-            await asyncio.sleep(0.1)
-            raise ValueError("Intentional async failure")
+@pytest.mark.asyncio
+async def test_make_sync_if_needed_on_sync_function():
+    """Test make_sync_if_needed on an already synchronous function."""
 
-        with self.assertRaises(ValueError):
-            call_sync(failing_async_function, 5)
+    l_sync_function = make_sync_if_needed(sync_function)
+    result = l_sync_function(5)
+    assert result == 10
 
-    async def test_make_run_in_new_thread_with_non_callable(self):
-        """Test make_run_in_new_thread with a non-callable object."""
-        with self.assertRaises(TypeError):
-            make_run_in_new_thread(123)  # Passing an integer instead of a function
 
-    async def test_make_run_in_new_process_with_non_callable(self):
-        """Test make_run_in_new_process with a non-callable object."""
-        with self.assertRaises(TypeError):
-            make_run_in_new_process(
-                "not a function"
-            )  # Passing a string instead of a function
+@pytest.mark.asyncio
+async def test_make_sync_if_needed_on_mixed_functions():
+    """Test make_sync_if_needed on a mix of coroutine and non-coroutine functions."""
 
-    async def test_thread_decorated_sync_function(self):
-        """Test a synchronous function decorated with make_run_in_new_thread."""
-        t = time.time()
+    async_func = make_sync_if_needed(async_function)
+    sync_func = make_sync_if_needed(sync_function)
 
-        async def stop1():
-            return time.time() - t
+    result_async = async_func(5)
+    result_sync = sync_func(5)
 
-        result = await asyncio.gather(thread_decorated_sync_function(5), stop1())
-        t2 = time.time() - t
+    assert result_async == 10
+    assert result_sync == 10
 
-        self.assertLess(result[1], 1)
-        self.assertEqual(result[0], 10)
-        self.assertGreater(t2, 1)
 
-    async def test_process_decorated_sync_function(self):
-        """Test a synchronous function decorated with make_run_in_new_process."""
-        t = time.time()
+@pytest.mark.asyncio
+async def test_nested_executors():
+    """Test running an executor inside another executor."""
 
-        async def stop1():
-            return time.time() - t
+    wrapper_outer = make_run_in_new_thread(nested_function)
+    result = await wrapper_outer(5)
+    assert result == 10
+    wrapper_outer.shutdown()
 
-        result = await asyncio.gather(process_decorated_sync_function(5), stop1())
-        t2 = time.time() - t
 
-        print(result, t2)
-        self.assertLess(result[1], 1)
-        self.assertEqual(result[0], 10)
-        self.assertGreater(t2, 1)
+@pytest.mark.asyncio
+async def test_call_sync_with_sync_function():
+    """Test call_sync with a synchronous function."""
+    result = call_sync(sync_function, 5)
+    assert result == 10
 
-    async def test_thread_decorated_async_function(self):
-        """Test an asynchronous function decorated with make_run_in_new_thread."""
-        t = time.time()
 
-        async def stop1():
-            return time.time() - t
+@pytest.mark.asyncio
+async def test_call_sync_with_async_function():
+    """Test call_sync with an asynchronous function."""
+    result = call_sync(async_function, 5)
+    assert result == 10
 
-        result = await asyncio.gather(thread_decorated_async_function(5), stop1())
-        t2 = time.time() - t
-
-        self.assertLess(result[1], 1)
-        self.assertEqual(result[0], 10)
-        self.assertGreater(t2, 1)
 
-    async def test_process_decorated_async_function(self):
-        """Test an asynchronous function decorated with make_run_in_new_process."""
-        t = time.time()
+@pytest.mark.asyncio
+async def test_call_sync_with_failing_async_function():
+    """Test call_sync with an asynchronous function that fails."""
 
-        async def stop1():
-            return time.time() - t
+    async def failing_async_function(x: int) -> int:
+        await asyncio.sleep(0.1)
+        raise ValueError("Intentional async failure")
 
-        result = await asyncio.gather(process_decorated_async_function(5), stop1())
-        t2 = time.time() - t
+    with pytest.raises(ValueError):
+        call_sync(failing_async_function, 5)
 
-        self.assertLess(result[1], 1)
-        self.assertEqual(result[0], 10)
-        self.assertGreater(t2, 1)
 
-    async def test_async_as_node(self):
-        """Test an asynchronous function decorated with make_run_in_new_process."""
-        node = fn.NodeDecorator(
-            node_id="test_async_as_node",
-            separate_process=True,
-        )(async_function)()
+@pytest.mark.asyncio
+async def test_make_run_in_new_thread_with_non_callable():
+    """Test make_run_in_new_thread with a non-callable object."""
+    with pytest.raises(TypeError):
+        make_run_in_new_thread(123)  # Passing an integer instead of a function
 
-        node["x"] = 5
-        await node
 
-        self.assertEqual(node["out"].value, 10)
-        self.assertEqual(
-            node.description, "An asynchronous function that multiplies the input by 2."
-        )
+@pytest.mark.asyncio
+async def test_make_run_in_new_process_with_non_callable():
+    """Test make_run_in_new_process with a non-callable object."""
+    with pytest.raises(TypeError):
+        make_run_in_new_process(
+            "not a function"
+        )  # Passing a string instead of a function
 
-        self.assertIsInstance(
-            node.func.__wrapped__, fn.utils.functions.ProcessExecutorWrapper
-        )
 
-        self.assertEqual(node.func.__wrapped__.func, async_function)
+@pytest.mark.asyncio
+async def test_thread_decorated_sync_function():
+    """Test a synchronous function decorated with make_run_in_new_thread."""
+    t = time.time()
 
-    async def test_sync_as_node(self):
-        """Test an asynchronous function decorated with make_run_in_new_process."""
-        node = fn.NodeDecorator(
-            node_id="test_sync_as_node",
-            separate_process=True,
-        )(sync_function)()
+    async def stop1():
+        return time.time() - t
 
-        node["x"] = 5
-        await node
+    result = await asyncio.gather(thread_decorated_sync_function(5), stop1())
+    t2 = time.time() - t
 
-        self.assertEqual(node["out"].value, 10)
-        self.assertEqual(
-            node.description, "A synchronous function that multiplies the input by 2."
-        )
+    assert result[1] < 1
+    assert result[0] == 10
+    assert t2 >= 1
 
-        self.assertIsInstance(
-            node.func.__wrapped__, fn.utils.functions.ProcessExecutorWrapper
-        )
 
-        self.assertEqual(node.func.__wrapped__.func, sync_function)
+@pytest.mark.asyncio
+async def test_process_decorated_sync_function():
+    """Test a synchronous function decorated with make_run_in_new_process."""
+    t = time.time()
 
-    async def test_async_as_node_thread(self):
-        """Test an asynchronous function decorated with make_run_in_new_process."""
-        node = fn.NodeDecorator(
-            node_id="test_async_as_node_thread",
-            separate_thread=True,
-        )(async_function)()
+    async def stop1():
+        return time.time() - t
 
-        node["x"] = 5
-        await node
+    result = await asyncio.gather(process_decorated_sync_function(5), stop1())
+    t2 = time.time() - t
 
-        self.assertEqual(node["out"].value, 10)
-        self.assertEqual(
-            node.description, "An asynchronous function that multiplies the input by 2."
-        )
+    print(result, t2)
+    assert result[1] < 1
+    assert result[0] == 10
+    assert t2 >= 1
 
-        self.assertIsInstance(
-            node.func.__wrapped__, fn.utils.functions.ThreadExecutorWrapper
-        )
 
-        self.assertEqual(node.func.__wrapped__.func, async_function)
+@pytest.mark.asyncio
+async def test_thread_decorated_async_function():
+    """Test an asynchronous function decorated with make_run_in_new_thread."""
+    t = time.time()
 
-    async def test_sync_as_node_thread(self):
-        """Test an asynchronous function decorated with make_run_in_new_process."""
-        node = fn.NodeDecorator(
-            node_id="test_sync_as_node_thread",
-            separate_thread=True,
-        )(sync_function)()
-
-        node["x"] = 5
-        await node
+    async def stop1():
+        return time.time() - t
 
-        self.assertEqual(node["out"].value, 10)
-        self.assertEqual(
-            node.description, "A synchronous function that multiplies the input by 2."
-        )
+    result = await asyncio.gather(thread_decorated_async_function(5), stop1())
+    t2 = time.time() - t
 
-        self.assertIsInstance(
-            node.func.__wrapped__, fn.utils.functions.ThreadExecutorWrapper
-        )
+    assert result[1] < 1
+    assert result[0] == 10
+    assert t2 >= 1
 
-        self.assertEqual(node.func.__wrapped__.func, sync_function)
 
-    async def test_async_as_node_dec(self):
-        """Test an asynchronous function decorated with make_run_in_new_process."""
+@pytest.mark.asyncio
+async def test_process_decorated_async_function():
+    """Test an asynchronous function decorated with make_run_in_new_process."""
+    t = time.time()
 
-        # wraps twice: to make it sync for process and in the executor wrapper
-        pf = make_run_in_new_process(async_function)
+    async def stop1():
+        return time.time() - t
 
-        node = fn.NodeDecorator(
-            node_id="test_async_as_node_dec",
-        )(pf)()
+    result = await asyncio.gather(process_decorated_async_function(5), stop1())
+    t2 = time.time() - t
 
-        node["x"] = 5
-        await node
+    assert result[1] < 1
+    assert result[0] == 10
+    assert t2 >= 1
 
-        self.assertEqual(node["out"].value, 10)
-        self.assertEqual(
-            node.description, "An asynchronous function that multiplies the input by 2."
-        )
 
-        self.assertIsInstance(
-            node.func.__wrapped__.__wrapped__, fn.utils.functions.ProcessExecutorWrapper
-        )
+@pytest.mark.asyncio
+async def test_async_as_node():
+    """Test an asynchronous function decorated with make_run_in_new_process."""
+    node = fn.NodeDecorator(
+        node_id="test_async_as_node",
+        separate_process=True,
+    )(async_function)()
 
-        self.assertEqual(node.func.__wrapped__.__wrapped__.func, async_function)
+    node["x"] = 5
+    await node
 
-    async def test_sync_as_node_dec(self):
-        """Test an asynchronous function decorated with make_run_in_new_process."""
-        node = fn.NodeDecorator(
-            node_id="test_sync_as_node_dec",
-            separate_process=True,
-        )(make_run_in_new_process(sync_function))()
+    assert node["out"].value == 10
+    assert (
+        node.description == "An asynchronous function that multiplies the input by 2."
+    )
 
-        node["x"] = 5
-        await node
+    assert isinstance(node.func.__wrapped__, fn.utils.functions.ProcessExecutorWrapper)
 
-        self.assertEqual(node["out"].value, 10)
-        self.assertEqual(
-            node.description, "A synchronous function that multiplies the input by 2."
-        )
+    assert node.func.__wrapped__.func == async_function
 
-        self.assertIsInstance(
-            node.func.__wrapped__, fn.utils.functions.ProcessExecutorWrapper
-        )
 
-        self.assertEqual(node.func.__wrapped__.func, sync_function)
+@pytest.mark.asyncio
+async def test_sync_as_node():
+    """Test an asynchronous function decorated with make_run_in_new_process."""
+    node = fn.NodeDecorator(
+        node_id="test_sync_as_node",
+        separate_process=True,
+    )(sync_function)()
 
-    async def test_async_as_node_thread_dec(self):
-        """Test an asynchronous function decorated with make_run_in_new_process."""
-        node = fn.NodeDecorator(
-            node_id="test_async_as_node_thread_dec",
-            separate_thread=True,
-        )(make_run_in_new_thread(async_function))()
+    node["x"] = 5
+    await node
 
-        node["x"] = 5
-        await node
+    assert node["out"].value == 10
+    assert node.description == "A synchronous function that multiplies the input by 2."
 
-        self.assertEqual(node["out"].value, 10)
-        self.assertEqual(
-            node.description, "An asynchronous function that multiplies the input by 2."
-        )
+    assert isinstance(node.func.__wrapped__, fn.utils.functions.ProcessExecutorWrapper)
 
-        self.assertIsInstance(
-            node.func.__wrapped__, fn.utils.functions.ThreadExecutorWrapper
-        )
+    assert node.func.__wrapped__.func == sync_function
 
-        self.assertEqual(node.func.__wrapped__.func, async_function)
 
-    async def test_sync_as_node_thread_dec(self):
-        """Test an asynchronous function decorated with make_run_in_new_process."""
-        node = fn.NodeDecorator(
-            node_id="test_sync_as_node_thread_dec",
-            separate_thread=True,
-        )(make_run_in_new_thread(sync_function))()
+@pytest.mark.asyncio
+async def test_async_as_node_thread():
+    """Test an asynchronous function decorated with make_run_in_new_process."""
+    node = fn.NodeDecorator(
+        node_id="test_async_as_node_thread",
+        separate_thread=True,
+    )(async_function)()
 
-        print(node.serialize())
-        node["x"] = 5
-        await node
+    node["x"] = 5
+    await node
 
-        self.assertEqual(node["out"].value, 10)
-        self.assertEqual(
-            node.description, "A synchronous function that multiplies the input by 2."
-        )
+    assert node["out"].value == 10
+    assert (
+        node.description == "An asynchronous function that multiplies the input by 2."
+    )
 
-        self.assertIsInstance(
-            node.func.__wrapped__, fn.utils.functions.ThreadExecutorWrapper
-        )
+    assert isinstance(node.func.__wrapped__, fn.utils.functions.ThreadExecutorWrapper)
 
-        self.assertEqual(node.func.__wrapped__.func, sync_function)
+    assert node.func.__wrapped__.func == async_function
+
+
+@pytest.mark.asyncio
+async def test_sync_as_node_thread():
+    """Test an asynchronous function decorated with make_run_in_new_process."""
+    node = fn.NodeDecorator(
+        node_id="test_sync_as_node_thread",
+        separate_thread=True,
+    )(sync_function)()
+
+    node["x"] = 5
+    await node
+
+    assert node["out"].value == 10
+    assert node.description == "A synchronous function that multiplies the input by 2."
+
+    assert isinstance(node.func.__wrapped__, fn.utils.functions.ThreadExecutorWrapper)
+
+    assert node.func.__wrapped__.func == sync_function
+
+
+@pytest.mark.asyncio
+async def test_async_as_node_dec():
+    """Test an asynchronous function decorated with make_run_in_new_process."""
+
+    # wraps twice: to make it sync for process and in the executor wrapper
+    pf = make_run_in_new_process(async_function)
+
+    node = fn.NodeDecorator(
+        node_id="test_async_as_node_dec",
+    )(pf)()
+
+    node["x"] = 5
+    await node
+
+    assert node["out"].value == 10
+    assert (
+        node.description == "An asynchronous function that multiplies the input by 2."
+    )
+
+    assert isinstance(
+        node.func.__wrapped__.__wrapped__, fn.utils.functions.ProcessExecutorWrapper
+    )
+
+    assert node.func.__wrapped__.__wrapped__.func == async_function
+
+
+@pytest.mark.asyncio
+async def test_sync_as_node_dec():
+    """Test an asynchronous function decorated with make_run_in_new_process."""
+    node = fn.NodeDecorator(
+        node_id="test_sync_as_node_dec",
+        separate_process=True,
+    )(make_run_in_new_process(sync_function))()
+
+    node["x"] = 5
+    await node
+
+    assert node["out"].value == 10
+    assert node.description == "A synchronous function that multiplies the input by 2."
+
+    assert isinstance(node.func.__wrapped__, fn.utils.functions.ProcessExecutorWrapper)
+
+    assert node.func.__wrapped__.func == sync_function
+
+
+@pytest.mark.asyncio
+async def test_async_as_node_thread_dec():
+    """Test an asynchronous function decorated with make_run_in_new_process."""
+    node = fn.NodeDecorator(
+        node_id="test_async_as_node_thread_dec",
+        separate_thread=True,
+    )(make_run_in_new_thread(async_function))()
+
+    node["x"] = 5
+    await node
+
+    assert node["out"].value == 10
+    assert (
+        node.description == "An asynchronous function that multiplies the input by 2."
+    )
+
+    assert isinstance(node.func.__wrapped__, fn.utils.functions.ThreadExecutorWrapper)
+
+    assert node.func.__wrapped__.func == async_function
+
+
+@pytest.mark.asyncio
+async def test_sync_as_node_thread_dec():
+    """Test an asynchronous function decorated with make_run_in_new_process."""
+    node = fn.NodeDecorator(
+        node_id="test_sync_as_node_thread_dec",
+        separate_thread=True,
+    )(make_run_in_new_thread(sync_function))()
+
+    node["x"] = 5
+    await node
+
+    assert node["out"].value == 10
+    assert node.description == "A synchronous function that multiplies the input by 2."
+
+    assert isinstance(node.func.__wrapped__, fn.utils.functions.ThreadExecutorWrapper)
+
+    assert node.func.__wrapped__.func == sync_function

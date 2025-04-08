@@ -1,6 +1,7 @@
 import unittest
 
 import funcnodes_core as fn
+import asyncio
 
 fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
 
@@ -40,7 +41,8 @@ class TestDataEnum(unittest.IsolatedAsyncioTestCase):
 
         node = test_enum_node()
         node.inputs["a"].value = "A"
-        await node
+        async with asyncio.timeout(1):
+            await node
         out = node.outputs["out"].value
         self.assertEqual(out, TestEnum.A)
 
