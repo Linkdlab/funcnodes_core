@@ -428,7 +428,7 @@ dependencies = [
     { name = "tqdm" },
 ]
 
-[package.dev-dependencies]
+[package.optional-dependencies]
 dev = [
     { name = "coverage" },
     { name = "funcnodes" },
@@ -443,24 +443,20 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.6.12" },
     { name = "dill" },
     { name = "exposedfunctionality", specifier = ">=0.3.20" },
+    { name = "funcnodes", marker = "extra == 'dev'", specifier = ">=0.5.35" },
+    { name = "funcnodes-basic", marker = "extra == 'dev'", specifier = ">=0.2.1" },
+    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.1.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.4" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.25.3" },
+    { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6.1" },
     { name = "python-dotenv" },
     { name = "setuptools" },
     { name = "tqdm" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "coverage", specifier = ">=7.6.12" },
-    { name = "funcnodes", specifier = ">=0.5.35" },
-    { name = "funcnodes-basic", specifier = ">=0.2.1" },
-    { name = "pre-commit", specifier = ">=4.1.0" },
-    { name = "pytest", specifier = ">=8.3.4" },
-    { name = "pytest-asyncio", specifier = ">=0.25.3" },
-    { name = "pytest-xdist", specifier = ">=3.6.1" },
-    { name = "vulture", specifier = ">=2.14" },
-    { name = "yappi", specifier = ">=1.6.10" },
+    { name = "vulture", marker = "extra == 'dev'", specifier = ">=2.14" },
+    { name = "yappi", marker = "extra == 'dev'", specifier = ">=1.6.10" },
 ]
 
 [[package]]

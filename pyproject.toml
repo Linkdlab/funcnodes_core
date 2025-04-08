@@ -36,7 +36,7 @@ tracker  = "https://github.com/Linkdlab/funcnodes_core/issues"
 download = "https://pypi.org/project/funcnodes-core/#files"
 
 
-[dependency-groups]
+[project.optional-dependencies]
 dev = [
     "coverage>=7.6.12",
     "funcnodes>=0.5.35",
