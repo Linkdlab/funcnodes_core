@@ -47,6 +47,12 @@ dev = [
     "pytest-xdist>=3.6.1",
     "vulture>=2.14",
     "yappi>=1.6.10",
+    "pytest-timeout",
+]
+
+[dependency-groups]
+dev = [
+ "funcnodes-core[dev]",
 ]
 
 [tool.vulture]
