@@ -100,8 +100,9 @@ class TestTriggerSpeed(unittest.IsolatedAsyncioTestCase):
         trigger_direct_called = called_triggerfast + called_trigger
 
         self.assertGreater(
-            trigger_direct_called, cound_directfunc / 10
-        )  # overhead due to all the trigger events
+            trigger_direct_called,
+            cound_directfunc / 10,  # overhead due to all the trigger set and clear
+        )
 
         with yappicontext("test_triggerspeeds_called_await.pstat"):
             node.inputs["input"].value = 1
@@ -118,7 +119,7 @@ class TestTriggerSpeed(unittest.IsolatedAsyncioTestCase):
             trigger_called_await = called_triggerfast + called_trigger
             self.assertGreater(
                 trigger_called_await,
-                trigger_direct_called / 100,  # holy molly thats a lot of overhead,
+                trigger_direct_called / 40,  # holy molly thats a lot of overhead,
                 # mosttly due to the waiting for the event, which is kinda slow
                 # uvloop might help, but this is not yet available under windows
             )
