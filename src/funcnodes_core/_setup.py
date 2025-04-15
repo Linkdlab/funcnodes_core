@@ -10,7 +10,7 @@ def setup_module(mod_data: InstalledModule) -> Optional[InstalledModule]:
     gc.collect()
     entry_points = mod_data.entry_points
     mod = mod_data.module
-    if not mod:
+    if not mod:  # funcnodes modules must have an module entry point
         return None
 
     # first we try to register the plugin setup function as this might register other functions
@@ -56,6 +56,7 @@ def setup_module(mod_data: InstalledModule) -> Optional[InstalledModule]:
         except ValueError as e:
             FUNCNODES_LOGGER.error("Error in module %s: %s" % (mod.__name__, e))
             del entry_points["shelf"]
+    mod_data._is_setup = True
     return mod_data
 
 
@@ -63,7 +64,8 @@ AVAILABLE_MODULES: Dict[str, InstalledModule] = {}
 
 
 def setup():
-    for name, mod in get_installed_modules().items():
-        mod = setup_module(mod)
+    for name, mod in get_installed_modules(AVAILABLE_MODULES).items():
+        if not mod._is_setup:
+            mod = setup_module(mod)
         if mod:
             AVAILABLE_MODULES[name] = mod

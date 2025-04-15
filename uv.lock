@@ -1,5 +1,4 @@
 version = 1
-revision = 1
 requires-python = ">=3.11"
 resolution-markers = [
     "sys_platform != 'emscripten'",
@@ -429,7 +428,7 @@ wheels = [
 
 [[package]]
 name = "funcnodes-core"
-version = "0.3.52"
+version = "0.3.53"
 source = { editable = "." }
 dependencies = [
     { name = "dill" },
@@ -476,7 +475,6 @@ requires-dist = [
     { name = "vulture", marker = "extra == 'dev'", specifier = ">=2.14" },
     { name = "yappi", marker = "extra == 'dev'", specifier = ">=1.6.10" },
 ]
-provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "funcnodes-core", extras = ["dev"] }]
