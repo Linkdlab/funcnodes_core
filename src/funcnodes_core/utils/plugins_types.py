@@ -44,6 +44,7 @@ class InstalledModule:
     plugins: List[BasePlugin] = field(default_factory=list)
     render_options: Optional[RenderOptions] = None
     version: Optional[str] = None
+    _is_setup = False
 
     @property
     def rep_dict(self) -> dict[str, Any]:
