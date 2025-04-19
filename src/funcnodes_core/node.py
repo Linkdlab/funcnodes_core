@@ -998,6 +998,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
                 if pbar is not None:
                     pbar.set_description_str("idle", refresh=False)
             except Exception as e:
+                triggerlogger.exception(e)
                 err = e
 
             if self._trigger_speed_flag != NodeFlags.TRIGGER_SPEED_FAST:
