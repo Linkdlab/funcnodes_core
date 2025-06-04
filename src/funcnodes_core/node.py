@@ -661,6 +661,15 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             else self.default_reset_inputs_on_trigger
         )
 
+    @reset_inputs_on_trigger.setter
+    def reset_inputs_on_trigger(self, value: bool):
+        """Sets the reset inputs on trigger flag."""
+        if value is None:
+            value = self.default_reset_inputs_on_trigger
+        if not isinstance(value, bool):
+            raise ValueError("reset_inputs_on_trigger must be a boolean")
+        self._reset_inputs_on_trigger = value
+
     @saveproperty
     def render_options(self):
         return self._render_options
