@@ -507,6 +507,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             "status": self.status(),
             "node_name": self.node_name,
             "description": self.description,
+            "reset_inputs_on_trigger": self.reset_inputs_on_trigger,
         }
 
         renderopt = self.render_options
@@ -1253,6 +1254,7 @@ class FullNodeJSON(BaseNodeJSON):
     io: List[FullNodeIOJSON]
     status: NodeStatus
     render_options: NotRequired[RenderOptions]
+    reset_inputs_on_trigger: NotRequired[Optional[bool]]
     properties: NotRequired[Dict[str, Any]]
 
 
