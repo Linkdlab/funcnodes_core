@@ -1,7 +1,7 @@
 [project]
 name = "funcnodes-core"
 
-version = "0.3.55"
+version = "0.3.56"
 
 description = "core package for funcnodes"
 authors = [{name = "Julian Kimmig", email = "julian.kimmig@linkdlab.de"}]
@@ -23,7 +23,8 @@ dependencies = [
     "setuptools",
     "dill",
     "tqdm",
-    ]
+
+]
 
 [project.license]
 text = "AGPL-3.0"
@@ -48,6 +49,7 @@ dev = [
     "vulture>=2.14",
     "yappi>=1.6.10",
     "pytest-timeout",
+    "pytest-funcnodes>=0.1.0",
 ]
 
 [dependency-groups]
