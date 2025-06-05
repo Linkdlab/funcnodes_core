@@ -20,11 +20,13 @@ async def test_datapaths():
 
     # print(node4.inputs["a"].datapath.src_repr())
     assert (
-        node4.inputs["a"].datapath.src_repr()
+        "\n".join(
+            [lin.strip() for lin in node4.inputs["a"].datapath.src_repr().splitlines()]
+        )
         == """n1(a)
 n1(b) -> n1(out) -> n3(a)
 n2(a)                     -> n3(out) -> n4(a)
-n2(b) -> n2(out) -> n3(b)                    """
+n2(b) -> n2(out) -> n3(b)"""
     )
     assert node4.inputs["a"].datapath.done()
 
