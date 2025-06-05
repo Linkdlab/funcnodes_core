@@ -1137,7 +1137,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         if triggerstack is None:
             triggerstack = TriggerStack()
 
-        triggerlogger.debug(f"triggering {self}")
+        triggerlogger.debug("triggering %s", self)
         self._trigger_open = True
         self._triggerstack = triggerstack
         self._triggerstack.append(asyncio.create_task(self()))

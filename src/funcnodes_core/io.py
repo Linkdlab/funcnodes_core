@@ -625,8 +625,12 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
         """Gets the Node instance that this NodeIO belongs to."""
         return self._node() if self._node is not None else None
 
-    @node.setter
-    def node(self, node: Node) -> None:
+    def set_node(self, node: Node) -> None:
+        """Sets the Node instance that this NodeIO belongs to.
+
+        Args:
+            node: The Node instance to set.
+        """
         if self._node is not None:
             if self._node() is node:
                 return
@@ -635,10 +639,10 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             self._node = weakref.ref(node)
         else:
             self._node = None
-        self.set_value(
-            self.value,
-            does_trigger=False,
-        )
+
+    @node.setter
+    def node(self, node: Node) -> None:
+        self.set_node(node)
 
     def ready(self) -> bool:
         return self.node is not None
@@ -824,7 +828,14 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         self._forwards_from: weakref.WeakSet[NodeInput] = weakref.WeakSet()
         self._datapath: Optional[DataPath] = None
         self.set_value(
-            self._default,
+            self.value,
+            does_trigger=False,
+        )
+
+    def set_node(self, node):
+        super().set_node(node)
+        self.set_value(
+            self.value,
             does_trigger=False,
         )
 
