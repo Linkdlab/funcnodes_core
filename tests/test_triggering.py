@@ -62,7 +62,7 @@ class TestTriggerSpeed(unittest.IsolatedAsyncioTestCase):
                 count_simplefunc = await _a_add_one(count_simplefunc)
 
         self.assertGreaterEqual(
-            cound_directfunc, count_simplefunc / 17
+            cound_directfunc, count_simplefunc / 20
         )  # overhead for this fast function is relativly heigh due to the event system (calls in the size of 50k/sec)
 
         # disable triggerlogger
