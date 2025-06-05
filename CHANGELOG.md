@@ -1,3 +1,9 @@
+## v0.4.1 (2025-06-05)
+
+### Fix
+
+- enhance done method in DataPath to handle None breaking_nodes and improve clarity
+
 ## v0.4.0 (2025-06-05)
 
 ### Feat
