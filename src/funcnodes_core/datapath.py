@@ -35,15 +35,13 @@ class DataPath:
         max_prev_length = max((len(rep) for rep in prev_reps_lines), default=0)
         # append " " before each previous representation to make them aligned
         prev_reps = [rep.rjust(max_prev_length) for rep in prev_reps_lines]
-        node = self.node_ref()
-        self_string = f"{node.name}({self.io})" if node else f"Unknown Node({self.io})"
 
         new_lines = []
         if len(prev_reps) == 0:
-            return self_string
+            return str(self)
         for i, p in enumerate(prev_reps):
             if i == len(prev_reps) // 2:
-                new_lines.append(p + " -> " + self_string)
+                new_lines.append(p + " -> " + str(self))
             else:
                 new_lines.append(p)
 
