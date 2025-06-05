@@ -209,7 +209,7 @@ class TestNodeIO(unittest.TestCase):
         node.trigger.assert_called_once_with(triggerstack=ts)
 
     def test_trigger_output(self):
-        node = Mock(trigger=Mock())
+        node = Mock(trigger=Mock(), inputs=dict())
         self.assertEqual(len(self.output_1.trigger()), 0)
         self.output_1.node = node
         self.input_1.node = node

@@ -782,6 +782,16 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             return False
         return self.ready() and not self.in_trigger
 
+    @property
+    def will_trigger(self) -> bool:
+        """Whether the node will trigger when the trigger input is set."""
+        if self.ready_to_trigger() and self._requests_trigger:
+            return True
+
+    @property
+    def in_trigger_soon(self) -> bool:
+        return self.in_trigger or self.will_trigger
+
     def __str__(self) -> str:
         """Returns a string representation of the node."""
         return f"{self.__class__.__name__}({self.uuid})"

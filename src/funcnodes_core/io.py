@@ -32,6 +32,7 @@ from .eventmanager import (
 )
 from .triggerstack import TriggerStack
 from .utils.data import deep_fill_dict, deep_remove_dict_on_equal
+from .datapath import DataPath
 
 from .utils.serialization import JSONEncoder, JSONDecoder, Encdata
 import json
@@ -634,6 +635,10 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
             self._node = weakref.ref(node)
         else:
             self._node = None
+        self.set_value(
+            self.value,
+            does_trigger=False,
+        )
 
     def ready(self) -> bool:
         return self.node is not None
@@ -817,6 +822,11 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         self._class_default = class_default
         self._forwards: weakref.WeakSet[NodeInput] = weakref.WeakSet()
         self._forwards_from: weakref.WeakSet[NodeInput] = weakref.WeakSet()
+        self._datapath: Optional[DataPath] = None
+        self.set_value(
+            self._default,
+            does_trigger=False,
+        )
 
     def get_value(self):
         v = super().get_value()
@@ -949,8 +959,30 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         ins.deserialize(serialized_nodeio)
         return ins
 
-    def set_value(self, value: object, does_trigger: Optional[bool] = None) -> None:
+    @property
+    def datapath(self) -> Optional[DataPath]:
+        """Gets the DataPath associated with this NodeInput."""
+        return self._datapath
+
+    @datapath.setter
+    def datapath(self, datapath: DataPath) -> None:
+        self._datapath = datapath
+
+    def set_value(
+        self,
+        value: object,
+        does_trigger: Optional[bool] = None,
+        datapath: Optional[DataPath] = None,
+    ) -> None:
         super().set_value(value)
+        if self.node is not None:
+            new_datapath = DataPath(self.node, self.uuid)
+        else:
+            new_datapath = None
+        if datapath is not None and new_datapath is not None:
+            new_datapath.add_src_path(datapath)
+
+        self.datapath = new_datapath
 
         if self.node is not None:
             if does_trigger is None:
@@ -1186,15 +1218,38 @@ class NodeOutput(NodeIO):
         """Gets a list of NodeIO instances connected to this one."""
         return list(self._connected)  # type: ignore connected has to be a list of NodeInput since outputs dont connect
 
-    def set_value(self, value: object, does_trigger: Optional[bool] = None) -> None:
+    def set_value(
+        self,
+        value: object,
+        does_trigger: Optional[bool] = None,
+    ) -> None:
         """Sets the internal value of the NodeIO.
 
         Args:
             value: The value to set.
         """
         super().set_value(value)
+
+        # input_paths: List[DataPath] = []
+        if self.node is not None:
+            datapath = DataPath(self.node, self.uuid)
+            for ip_name, input in self.node.inputs.items():
+                if ip_name == "_triggerinput":
+                    continue
+                if input.datapath is not None:
+                    datapath.add_src_path(input.datapath)
+                    # input_paths.append(input.datapath)
+        else:
+            datapath = None
+            # input_paths = []
         for other in self.connections:
-            other.set_value(value, does_trigger=does_trigger)
+            # if self.node is not None:
+            #     for input_path in input_paths:
+            #         datapath.add_src_path(input_path)
+            # else:
+            #     datapath = None
+
+            other.set_value(value, does_trigger=does_trigger, datapath=datapath)
 
     def post_connect(self, other: NodeIO):
         """Called after a connection is made.
