@@ -1,6 +1,7 @@
 from __future__ import annotations
 from weakref import ref
 from typing import TYPE_CHECKING, List
+from .utils.serialization import JSONEncoder, Encdata
 
 if TYPE_CHECKING:
     from .node import Node
@@ -61,3 +62,26 @@ class DataPath:
             if not trg_path.done():
                 return False
         return True
+
+    def __str__(self):
+        node = self.node_ref()
+        return f"{node.name}({self.io})" if node else f"Unknown Node({self.io})"
+
+    def src_graph(self):
+        return [[path.src_graph() + [path] for path in self.src_paths]]
+
+    def str_src_graph(self):
+        return [[path.str_src_graph() + [str(path)] for path in self.src_paths]]
+
+
+def datapath_handler(obj, preview=False):
+    """
+    Encodes bytes objects to base64 strings.
+    """
+    if isinstance(obj, DataPath):
+        # Convert bytes to base64 string
+        return Encdata(done=False, handeled=True, data=obj.src_graph())
+    return Encdata(data=obj, handeled=False)
+
+
+JSONEncoder.add_encoder(datapath_handler, enc_cls=[DataPath])
