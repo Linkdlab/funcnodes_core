@@ -1,7 +1,9 @@
-from typing import List, Dict, TypedDict, Tuple, Any
+from typing import List, Dict, TypedDict, Tuple, Any, Optional
 import json
 from uuid import uuid4
 import traceback
+
+from .grouping_logic import GroupingLogic,NodeGroup
 
 from .node import (
     FullNodeJSON,
@@ -29,6 +31,7 @@ class NodeException(Exception):
     pass
 
 
+
 class FullNodeSpaceJSON(TypedDict):
     """
     FullNodeSpaceJSON for a full serilization including temporary properties
@@ -38,6 +41,7 @@ class FullNodeSpaceJSON(TypedDict):
     edges: List[Tuple[str, str, str, str]]
     prop: Dict[str, Any]
     lib: FullLibJSON
+    groups: Dict[str, NodeGroup]
 
 
 class NodeSpaceJSON(TypedDict, total=False):
@@ -48,6 +52,9 @@ class NodeSpaceJSON(TypedDict, total=False):
     nodes: List[NodeJSON]
     edges: List[Tuple[str, str, str, str]]
     prop: Dict[str, Any]
+    groups: Dict[str, NodeGroup]
+
+
 
 
 class NodeSpace(EventEmitterMixin):
@@ -70,6 +77,7 @@ class NodeSpace(EventEmitterMixin):
         self._secret_properties: Dict[  # secret properties are not serialized
             str, Any
         ] = {}
+        self.groups = GroupingLogic()
         self.lib = Library()
         if id is None:
             id = uuid4().hex
@@ -189,8 +197,9 @@ class NodeSpace(EventEmitterMixin):
 
     # endregion Properties
 
-    # region serialization
+    
 
+    # region serialization
     def full_serialize(self, with_io_values=False) -> FullNodeSpaceJSON:
         """
         Serializes the NodeSpace and all of its nodes and edges.
@@ -203,6 +212,7 @@ class NodeSpace(EventEmitterMixin):
             "prop": self._properties,
             "lib": self.lib.full_serialize(),
             "edges": self.serialize_edges(),
+            "groups": self.serialize_groups(),
         }
 
     def full_nodes_serialize(self, with_io_values=False) -> List[FullNodeJSON]:
@@ -289,6 +299,12 @@ class NodeSpace(EventEmitterMixin):
             if output.node is not None and input.node is None
         ]
 
+    def serialize_groups(self) -> Dict[str, NodeGroup]:
+        return self.groups.serialize()
+
+    def deserialize_groups(self, data: Dict[str, NodeGroup]):
+        self.groups.deserialize(data)
+
     def deserialize(self, data: NodeSpaceJSON):
         """
         deserialize deserializes the nodespace from a dictionary
@@ -302,6 +318,7 @@ class NodeSpace(EventEmitterMixin):
         self._properties = data.get("prop", {})
         self.deserialize_nodes(data.get("nodes", []))
         self.deserialize_edges(data.get("edges", []))
+        self.deserialize_groups(data.get("groups", {}))
 
     def serialize(self) -> NodeSpaceJSON:
         """serialize serializes the nodespace to a dictionary
@@ -315,6 +332,7 @@ class NodeSpace(EventEmitterMixin):
             nodes=self.serialize_nodes(),
             edges=self.serialize_edges(),
             prop=self._properties,
+            groups=self.serialize_groups()
         )
         return json.loads(json.dumps(ret, cls=JSONEncoder), cls=JSONDecoder)
 
@@ -322,7 +340,7 @@ class NodeSpace(EventEmitterMixin):
         """clear removes all nodes and edges from the nodespace"""
         for node in self.nodes:
             self.remove_node_instance(node)
-
+        self.groups = GroupingLogic()
         self._properties = {}
 
     # endregion serialization
@@ -395,7 +413,7 @@ class NodeSpace(EventEmitterMixin):
         """
         if node.uuid not in self._nodes:
             raise ValueError(f"node with uuid '{node.uuid}' not found in nodespace")
-
+        self.groups.ungroup_nodes([node.uuid])
         node = self._nodes.pop(node.uuid)
         node.nodespace = None
         node.off("*", self.on_node_event)

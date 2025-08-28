@@ -91,5 +91,6 @@ def serialize_nodespace_for_saving(nodespace: NodeSpace):
         nodes=node_ret,
         edges=nodespace.serialize_edges(),
         prop=nodespace._properties,
+        groups=nodespace.serialize_groups(),
     )
     return json.loads(json.dumps(ret, cls=JSONEncoder), cls=JSONDecoder)
