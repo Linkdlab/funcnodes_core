@@ -951,6 +951,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
             self._does_trigger = data["does_trigger"]
         if "default" in data:
             self._default = data["default"]
+            self._value = self._default
 
     @classmethod
     def from_serialized_nodeio(
