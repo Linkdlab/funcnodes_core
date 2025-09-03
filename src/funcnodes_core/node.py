@@ -3,15 +3,15 @@ import gc
 from typing import (
     Dict,
     Type,
-    Optional,
-    TypedDict,
     List,
     NotRequired,
     Literal,
     Tuple,
     Any,
     TYPE_CHECKING,
+    Optional,
 )
+from typing_extensions import TypedDict
 from abc import ABC, ABCMeta, abstractmethod
 import asyncio
 import inspect
