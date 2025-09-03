@@ -2,14 +2,13 @@
 from typing import List, Dict, Any, Optional, TypedDict, Tuple
 from uuid import uuid4
 
+
 class NodeGroup(TypedDict, total=False):
     node_ids: List[str]
     child_groups: List[str]
     parent_group: Optional[str]
     meta: Dict[str, Any]
     position: Optional[Tuple[float, float]]
-
-
 
 
 class GroupingLogic:
@@ -30,7 +29,13 @@ class GroupingLogic:
         self._node_to_group_map: Dict[str, str] = {}
         self._is_cleaning = False
 
-    def add_group(self, group_id: str, node_ids: Optional[List[str]] = None, parent_group: Optional[str] = None, meta: Optional[Dict[str, Any]] = None) -> str:
+    def add_group(
+        self,
+        group_id: str,
+        node_ids: Optional[List[str]] = None,
+        parent_group: Optional[str] = None,
+        meta: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """
         Creates a new group, optionally associating nodes and a parent with it.
         This operation is atomic and safe from premature cleanup.
@@ -61,12 +66,12 @@ class GroupingLogic:
         # but our new group is safe.
         if node_ids:
             self.add_nodes_to_group(group_id, node_ids)
-        
+
         # Step 3: NOW that the group is stable, set its parent. Any cleanup
         # triggered by this operation will not affect our new group.
         if parent_group:
             self.set_group_parent(group_id, parent_group)
-        
+
         return group_id
 
     def remove_group(self, group_id: str, recursive: bool = False):
@@ -78,7 +83,7 @@ class GroupingLogic:
 
         group = self._groups[group_id]
         parent_id = group.get("parent_group")
-        
+
         child_ids = list(group.get("child_groups", []))
         for child_id in child_ids:
             if recursive:
@@ -94,7 +99,7 @@ class GroupingLogic:
 
         # Use .pop() to safely remove the key
         self._groups.pop(group_id, None)
-        
+
         self._cleanup_empty_groups()
 
     def get_group(self, group_id: str) -> Optional[NodeGroup]:
@@ -115,7 +120,9 @@ class GroupingLogic:
             raise ValueError("A group cannot be its own parent.")
 
         if parent_id in self.get_group_ancestors(child_id) + [child_id]:
-             raise ValueError("Cannot set parent, as this would create a circular dependency.")
+            raise ValueError(
+                "Cannot set parent, as this would create a circular dependency."
+            )
 
         old_parent_id = self._groups[child_id].get("parent_group")
         if old_parent_id and old_parent_id in self._groups:
@@ -126,7 +133,7 @@ class GroupingLogic:
         if parent_id:
             if child_id not in self._groups[parent_id]["child_groups"]:
                 self._groups[parent_id]["child_groups"].append(child_id)
-        
+
         self._cleanup_empty_groups()
 
     def add_nodes_to_group(self, group_id: str, node_ids: List[str]):
@@ -144,14 +151,14 @@ class GroupingLogic:
             if node_id not in group["node_ids"]:
                 group["node_ids"].append(node_id)
             self._node_to_group_map[node_id] = group_id
-    
+
     def remove_nodes_from_group(self, group_id: str, node_ids: List[str]):
         """
         Removes specific nodes from a given group.
         """
         if group_id not in self._groups:
             return
-            
+
         group = self._groups[group_id]
         for node_id in node_ids:
             if node_id in group["node_ids"]:
@@ -162,7 +169,7 @@ class GroupingLogic:
                 except ValueError:
                     # Ignore if node was already removed somehow
                     pass
-        
+
         self._cleanup_empty_groups()
 
     def ungroup_nodes(self, node_ids: List[str]):
@@ -178,7 +185,7 @@ class GroupingLogic:
                 if node_id in group["node_ids"]:
                     group["node_ids"].remove(node_id)
                 del self._node_to_group_map[node_id]
-        
+
         # Only cleanup if any groups were actually modified
         if groups_to_cleanup:
             self._cleanup_empty_groups()
@@ -197,11 +204,17 @@ class GroupingLogic:
         current_id = self._groups.get(group_id, {}).get("parent_group")
         while current_id:
             ancestors.append(current_id)
-            if current_id == self._groups.get(current_id, {}).get("parent_group"): break # Self-parent cycle
+            if current_id == self._groups.get(current_id, {}).get("parent_group"):
+                break  # Self-parent cycle
             current_id = self._groups.get(current_id, {}).get("parent_group")
         return ancestors
 
-    def group_together(self, node_ids: Optional[List[str]] = None, group_ids: Optional[List[str]] = None, new_group_id: Optional[str] = None) -> str:
+    def group_together(
+        self,
+        node_ids: Optional[List[str]] = None,
+        group_ids: Optional[List[str]] = None,
+        new_group_id: Optional[str] = None,
+    ) -> str:
         """
         Creates a new group containing the specified nodes and child groups.
 
@@ -219,7 +232,7 @@ class GroupingLogic:
 
         Returns:
             The ID of the newly created group.
-        
+
         Raises:
             ValueError: If both node_ids and group_ids are empty, or if an
                         invalid grouping is attempted (e.g., making a group a
@@ -240,36 +253,53 @@ class GroupingLogic:
         self._is_cleaning = True
         try:
             # --- Step 1: Find the common ancestor for the new group ---
-            original_node_group_ids = {self.find_group_of_node(nid) for nid in node_ids if self.find_group_of_node(nid)}
-            all_involved_group_ids = {g for g in original_node_group_ids.union(set(group_ids)) if g in self._groups}
+            original_node_group_ids = {
+                self.find_group_of_node(nid)
+                for nid in node_ids
+                if self.find_group_of_node(nid)
+            }
+            all_involved_group_ids = {
+                g
+                for g in original_node_group_ids.union(set(group_ids))
+                if g in self._groups
+            }
 
             common_ancestor_id = None
             if all_involved_group_ids:
-                ancestor_chains = [[g] + self.get_group_ancestors(g) for g in all_involved_group_ids]
+                ancestor_chains = [
+                    [g] + self.get_group_ancestors(g) for g in all_involved_group_ids
+                ]
                 if ancestor_chains:
                     common_ancestors = set(ancestor_chains[0])
                     for chain in ancestor_chains[1:]:
                         common_ancestors.intersection_update(set(chain))
-                    
+
                     if common_ancestors:
-                        tentative_ancestor = max(common_ancestors, key=lambda a_gid: ancestor_chains[0].index(a_gid))
-                        
+                        tentative_ancestor = max(
+                            common_ancestors,
+                            key=lambda a_gid: ancestor_chains[0].index(a_gid),
+                        )
+
                         if tentative_ancestor in all_involved_group_ids:
                             # The common ancestor is one of the groups being moved.
                             # The new group's parent should be the parent of this group.
                             parent_group = self.get_group(tentative_ancestor)
-                            common_ancestor_id = parent_group.get("parent_group") if parent_group else None
+                            common_ancestor_id = (
+                                parent_group.get("parent_group")
+                                if parent_group
+                                else None
+                            )
                         else:
                             common_ancestor_id = tentative_ancestor
-            
+
             # --- Step 2: Create the new group and arrange nodes/children ---
             # Create the new group under the determined common ancestor.
             self.add_group(group_id=gid, parent_group=common_ancestor_id)
-            
+
             # Move the specified nodes into the new group.
             if node_ids:
                 self.add_nodes_to_group(gid, node_ids)
-            
+
             # Reparent the specified groups to become children of the new group.
             for child_gid in group_ids:
                 self.set_group_parent(child_gid, gid)
@@ -292,10 +322,11 @@ class GroupingLogic:
         try:
             while True:
                 empty_leaf_groups = [
-                    gid for gid, group in self._groups.items()
+                    gid
+                    for gid, group in self._groups.items()
                     if not group.get("node_ids") and not group.get("child_groups")
                 ]
-                
+
                 if not empty_leaf_groups:
                     break
 
@@ -310,11 +341,11 @@ class GroupingLogic:
         """
         self._groups = group_data or {}
         self._node_to_group_map.clear()
-        
+
         for group_id, group in self._groups.items():
             group.setdefault("node_ids", [])
             group.setdefault("child_groups", [])
-            
+
             for node_id in group["node_ids"]:
                 self._node_to_group_map[node_id] = group_id
 

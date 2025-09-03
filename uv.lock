@@ -306,15 +306,15 @@ wheels = [
 
 [[package]]
 name = "exposedfunctionality"
-version = "0.3.20"
+version = "1.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyyaml" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/14/2d/293b8dd4a8d021736e3f8c2fe11d44050998886da0cab3f4b8c90b746443/exposedfunctionality-0.3.20.tar.gz", hash = "sha256:f45bfc747177a9306c2c53893818910b32e264246a961ad605202d37bcdbf674", size = 23887, upload-time = "2025-02-24T12:23:22.874Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b9/e2/b46eec09792009ccee3fa3d8fba3540be1478655612fae8ba3f6f1b871ca/exposedfunctionality-1.0.2.tar.gz", hash = "sha256:6d4a55223041ef91d955d8016c2afbbcedb8e70fd1fdec76dfe69073d9da6f79", size = 68056, upload-time = "2025-09-03T09:38:58.119Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e2/f9/4b440f7a6592d4f94e4eb084aff7ec4025e8f86292ab4633d6499766252c/exposedfunctionality-0.3.20-py3-none-any.whl", hash = "sha256:aa009389ebf7230493f2b960acd2d5142145eae9fc8f2f679bca9eaa8d1e53c1", size = 27090, upload-time = "2025-02-24T12:23:21.374Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/42/111fdd98410f4cc3c2bcb8cf1e92132f214dc5872b52db5ec84ccf7d16ba/exposedfunctionality-1.0.2-py3-none-any.whl", hash = "sha256:6a58bbd700044a80b11b4fbeaf4458fd034f455847be9036718d9238574d0bc5", size = 28831, upload-time = "2025-09-03T09:38:57.051Z" },
 ]
 
 [[package]]
@@ -452,7 +452,7 @@ wheels = [
 
 [[package]]
 name = "funcnodes-core"
-version = "1.0.0a0"
+version = "1.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "dill" },
@@ -486,7 +486,7 @@ dev = [
 requires-dist = [
     { name = "coverage", marker = "extra == 'dev'", specifier = ">=7.6.12" },
     { name = "dill" },
-    { name = "exposedfunctionality", specifier = ">=0.3.20" },
+    { name = "exposedfunctionality", specifier = ">=1.0.2" },
     { name = "funcnodes", marker = "extra == 'dev'", specifier = ">=0.5.35" },
     { name = "funcnodes-basic", marker = "extra == 'dev'", specifier = ">=0.2.1" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.1.0" },

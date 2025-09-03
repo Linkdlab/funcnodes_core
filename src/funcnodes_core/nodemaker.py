@@ -3,7 +3,11 @@ from abc import ABC
 from typing import Callable, Type, Any, List, Optional, Tuple, Dict
 import inspect
 from warnings import warn
-from exposedfunctionality import assure_exposed_method
+from exposedfunctionality import (
+    assure_exposed_method,
+    InputMeta as ExposedInputMeta,
+    OutputMeta as ExposedOutputMeta,
+)
 from exposedfunctionality.func import ExposedMethodKwargs, ExposedMethodKwargsKeys
 from exposedfunctionality.function_parser import ReturnType
 from .node import (
@@ -13,7 +17,7 @@ from .node import (
     _get_nodeclass_inputs,
     NodeMeta,
 )
-from .io import NodeInput, NodeOutput
+from .io import NodeInput, NodeInputOptions, NodeOutput, NodeOutputOptions
 from functools import wraps, partial
 from .utils.functions import (
     ExecutorWrapper,
@@ -145,6 +149,8 @@ def node_class_maker(
     )
 
     return _Node
+
+
 
 
 class NodeDecoratorKwargs(ExposedMethodKwargs, NodeClassDict, total=False):

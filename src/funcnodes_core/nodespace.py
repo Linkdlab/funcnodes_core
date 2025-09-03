@@ -3,7 +3,7 @@ import json
 from uuid import uuid4
 import traceback
 
-from .grouping_logic import GroupingLogic,NodeGroup
+from .grouping_logic import GroupingLogic, NodeGroup
 
 from .node import (
     FullNodeJSON,
@@ -31,7 +31,6 @@ class NodeException(Exception):
     pass
 
 
-
 class FullNodeSpaceJSON(TypedDict):
     """
     FullNodeSpaceJSON for a full serilization including temporary properties
@@ -53,8 +52,6 @@ class NodeSpaceJSON(TypedDict, total=False):
     edges: List[Tuple[str, str, str, str]]
     prop: Dict[str, Any]
     groups: Dict[str, NodeGroup]
-
-
 
 
 class NodeSpace(EventEmitterMixin):
@@ -197,8 +194,6 @@ class NodeSpace(EventEmitterMixin):
 
     # endregion Properties
 
-    
-
     # region serialization
     def full_serialize(self, with_io_values=False) -> FullNodeSpaceJSON:
         """
@@ -332,7 +327,7 @@ class NodeSpace(EventEmitterMixin):
             nodes=self.serialize_nodes(),
             edges=self.serialize_edges(),
             prop=self._properties,
-            groups=self.serialize_groups()
+            groups=self.serialize_groups(),
         )
         return json.loads(json.dumps(ret, cls=JSONEncoder), cls=JSONDecoder)
 
