@@ -2,7 +2,6 @@ from __future__ import annotations
 from typing import (
     Dict,
     Optional,
-    TypedDict,
     List,
     TYPE_CHECKING,
     Type,
@@ -13,6 +12,7 @@ from typing import (
     Tuple,
     Required,
 )
+from typing_extensions import TypedDict
 from collections.abc import Callable
 from uuid import uuid4
 from exposedfunctionality import FunctionInputParam, FunctionOutputParam
@@ -307,6 +307,14 @@ class NodeOutputOptions(IOOptions, NodeOutputSerialization, total=False):
     """Typing definition for Node Output options."""
 
 
+
+class InputMeta(FunctionInputParam, NodeInputOptions, total=False):
+    pass
+
+
+class OutputMeta(FunctionOutputParam, NodeOutputOptions, total=False):
+    pass
+
 def generate_value_options(
     _type: SerializedType, value_options: Optional[GenericValueOptions] = None
 ) -> ValueOptions:
@@ -419,6 +427,21 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
                         self.on(event, cb)
                 else:
                     self.on(event, callback)
+
+    @classmethod
+    def filter_serialized_io(cls, serialized_io: InputMeta | OutputMeta) -> InputMeta | OutputMeta:
+        d={}
+        if "name" in serialized_io:
+            d["name"]=serialized_io["name"]
+        if "description" in serialized_io:
+            d["description"]=serialized_io["description"]
+        if "type" in serialized_io:
+            d["type"]=serialized_io["type"]
+        if "allow_multiple" in serialized_io:
+            d["allow_multiple"]=serialized_io["allow_multiple"]
+
+        return d
+     
 
     def deserialize(self, data: NodeIOSerialization) -> None:
         if "name" in data:
@@ -884,7 +907,22 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         return super().is_connected() or len(self._forwards_from) > 0
 
     @classmethod
-    def from_serialized_input(cls, serialized_input: FunctionInputParam) -> NodeInput:
+    def filter_serialized_input(cls, serialized_input: InputMeta) -> InputMeta:
+        d=cls.filter_serialized_io(serialized_input)
+        d["does_trigger"]=serialized_input.get("does_trigger")
+        d["required"]=serialized_input.get("required")
+        d["default"]=serialized_input.get("default", NoValue)
+        d["uuid"]=serialized_input.get(
+                # overwriting the name attribute losses reference,
+                # which is why we use _name (see expose_method if exposedfunctionality)
+                "_name",
+                serialized_input.get("name")
+            )
+        
+        return d
+
+    @classmethod
+    def from_serialized_input(cls, serialized_input: InputMeta) -> NodeInput:
         """
         Creates a NodeInput instance from serialized input data.
 
@@ -895,18 +933,8 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
             An instance of NodeInput initialized with the serialized data.
         """
         return cls(
-            uuid=serialized_input.get(
-                # overwriting the name attribute losses reference,
-                # which is why we use _name (see expose_method if exposedfunctionality)
-                "_name",
-                serialized_input.get("name"),
-            ),
-            name=serialized_input.get("name"),
-            description=serialized_input.get("description"),
-            type=serialized_input["type"],
-            allow_multiple=serialized_input.get("allow_multiple"),
-            default=serialized_input.get("default", NoValue),
-        )
+            **cls.filter_serialized_input(serialized_input),
+        )     
 
     def serialize(self, drop=True) -> NodeInputSerialization:
         """
@@ -1170,10 +1198,15 @@ class NodeOutput(NodeIO):
         super().__init__(*args, **kwargs)
 
         # self._connected: List[NodeInput] = self._connected
-
+    @classmethod
+    def filter_serialized_output(cls, serialized_input: OutputMeta) -> OutputMeta:
+        d=cls.filter_serialized_io(serialized_input)
+        d["uuid"]=serialized_input.get("name")
+        return d
+    
     @classmethod
     def from_serialized_output(
-        cls, serialized_output: FunctionOutputParam
+        cls, serialized_output: OutputMeta
     ) -> NodeOutput:
         """
         Creates a NodeOutput instance from serialized output data.
@@ -1185,9 +1218,8 @@ class NodeOutput(NodeIO):
             An instance of NodeOutput initialized with the serialized data.
         """
         return cls(
-            uuid=serialized_output["name"],
-            description=serialized_output.get("description"),
-            type=serialized_output["type"],
+
+            **cls.filter_serialized_output(serialized_output),
         )
 
     def serialize(self, drop: bool = True) -> NodeOutputSerialization:

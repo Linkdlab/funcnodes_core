@@ -523,13 +523,11 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(node.outputs["out"].value, 3)
 
-
     async def test_decorator_with_pipe_union_type(self):
-
         @fn.NodeDecorator(node_id="my_node")
         def my_node(a: int | str) -> int:
             return a
-        
+
         node = my_node()
         node["a"] = 1
         await node
@@ -542,14 +540,24 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(a_input["type"], {"anyOf": ["int", "str"]})
 
     async def test_decorator_with_annotated_type(self):
-
         @fn.NodeDecorator(node_id="my_node")
-        def my_node(a: Annotated[int, fn.InputMeta(name="b",description="A",default=1)]) -> Annotated[int, fn.OutputMeta(name="c",description="C")]:
-            return a+1
+        def my_node(
+            a: Annotated[
+                int,
+                fn.InputMeta(name="b", description="A", default=1, does_trigger=False),
+            ],
+        ) -> Annotated[int, fn.OutputMeta(name="c", description="C")]:
+            return a + 1
 
         node = my_node()
-        await node
-        self.assertEqual(node.inputs["b"].value, 1)
-        self.assertEqual(node.outputs["c"].value, 2)
+        
+        import pprint
 
-       
+        pprint.pprint(node.serialize())
+        self.assertEqual(node.inputs["a"].value, 1)
+        self.assertEqual(node.inputs["a"].name, "b")
+        self.assertEqual(node.inputs["a"].does_trigger, False)
+
+        await node
+        self.assertEqual(node.outputs["c"].value, 2)
+        

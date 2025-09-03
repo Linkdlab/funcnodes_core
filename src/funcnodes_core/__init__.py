@@ -14,6 +14,8 @@ from .io import (
     IOOptions,
     NodeOutputOptions,
     NodeInputOptions,
+    InputMeta,
+    OutputMeta,
 )
 
 from .node import Node, get_nodeclass, NodeJSON, IONotFoundError, NodeTriggerError
@@ -31,7 +33,12 @@ from . import lib
 from . import nodemaker
 from . import _logging as logging
 
-from .nodemaker import NodeClassMixin, NodeDecorator, instance_nodefunction
+from .nodemaker import (
+    NodeClassMixin,
+    NodeDecorator,
+    instance_nodefunction,
+
+)
 from ._logging import FUNCNODES_LOGGER, get_logger, set_log_format
 
 from .data import DataEnum
@@ -103,6 +110,8 @@ __all__ = [
     "DataEnum",
     "add_type",
     "controlled_wrapper",
+    "InputMeta",
+    "OutputMeta",
     "types",
     "NodeIOSerialization",
     "flatten_shelf",
