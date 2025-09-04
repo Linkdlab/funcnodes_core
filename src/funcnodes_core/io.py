@@ -440,6 +440,17 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
         if "allow_multiple" in serialized_io:
             d["allow_multiple"]=serialized_io["allow_multiple"]
 
+        if "render_options" in serialized_io:
+            d["render_options"]=serialized_io["render_options"]
+        if "value_options" in serialized_io:
+            d["value_options"]=serialized_io["value_options"]
+        if "emit_value_set" in serialized_io:
+            d["emit_value_set"]=serialized_io["emit_value_set"]
+        if "on" in serialized_io:
+            d["on"]=serialized_io["on"]
+        if "hidden" in serialized_io:
+            d["hidden"]=serialized_io["hidden"]
+
         return d
      
 
