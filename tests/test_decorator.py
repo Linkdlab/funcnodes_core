@@ -544,7 +544,7 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
         def my_node(
             a: Annotated[
                 int,
-                fn.InputMeta(name="b", description="A", default=1, does_trigger=False),
+                fn.InputMeta(name="b", description="A", default=1, does_trigger=False,hidden=True),
             ],
         ) -> Annotated[int, fn.OutputMeta(name="c", description="C")]:
             return a + 1
@@ -557,6 +557,7 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(node.inputs["a"].value, 1)
         self.assertEqual(node.inputs["a"].name, "b")
         self.assertEqual(node.inputs["a"].does_trigger, False)
+        self.assertEqual(node.inputs["a"].hidden, True)
 
         await node
         self.assertEqual(node.outputs["c"].value, 2)
