@@ -1,7 +1,7 @@
 [project]
 name = "funcnodes-core"
 
-version = "1.0.2"
+version = "1.0.3"
 
 description = "core package for funcnodes"
 authors = [{name = "Julian Kimmig", email = "julian.kimmig@linkdlab.de"}]
@@ -39,7 +39,7 @@ download = "https://pypi.org/project/funcnodes-core/#files"
 [project.optional-dependencies]
 dev = [
     "coverage>=7.6.12",
-    "funcnodes>=0.5.35",
+    "funcnodes>=1.0.0",
     "funcnodes-basic>=0.2.1",
     "pre-commit>=4.1.0",
     "pytest>=8.3.4",
