@@ -1137,7 +1137,10 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         if not other.is_input():
             raise NodeConnectionError("Can only forward to other inputs")
 
-        if other.is_connected():
+        # If the target `other` appears connected only because it already
+        # registered a `forwards_from(self)` in the initiating call, allow it.
+        # Otherwise, enforce the single-connection rule unless `replace=True`.
+        if other.is_connected() and not other.has_forwards_from(self):
             if not replace:
                 raise MultipleConnectionsError("Can only forward to unconnected inputs")
             else:
