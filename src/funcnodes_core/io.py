@@ -21,6 +21,7 @@ from exposedfunctionality.function_parser.types import (
     SerializedType,
     EnumOf,
 )
+from copy import deepcopy
 from exposedfunctionality import serialize_type
 from .eventmanager import (
     AsyncEventManager,
@@ -974,10 +975,12 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
 
         return ser
 
-    def to_dict(self) -> NodeInputOptions:
+    def to_dict(self, include_on: bool = False) -> NodeInputOptions:
         ser: IOOptions = NodeInputOptions(
             **self.serialize(drop=False),
         )
+        if include_on:
+            ser["on"] = deepcopy(self._events)  
         if NodeInput.is_default_factory(self._default):
             ser["default"] = self._default
         return ser
@@ -1245,10 +1248,12 @@ class NodeOutput(NodeIO):
         """
         return NodeOutputSerialization(**super().serialize(drop=drop))
 
-    def to_dict(self) -> NodeOutputOptions:
+    def to_dict(self, include_on: bool = False) -> NodeOutputOptions:
         ser: IOOptions = NodeOutputOptions(
             **self.serialize(drop=False),
         )
+        if include_on:
+            ser["on"] = deepcopy(self._events)
         return ser
 
     def deserialize(self, data: NodeIOSerialization) -> None:
