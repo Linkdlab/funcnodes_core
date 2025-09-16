@@ -1,3 +1,9 @@
+## v1.0.5 (2025-09-16)
+
+### Feat
+
+- add include_on parameter to to_dict methods for NodeInput and NodeOutput, to allow setting of "on" via the Annotated typing format.
+
 ## v0.4.1 (2025-06-05)
 
 ### Fix

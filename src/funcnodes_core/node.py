@@ -144,7 +144,7 @@ def _parse_nodeclass_io(node: Node):
 
     outputs = _get_nodeclass_outputs(node)
     for ipid, ip in inputs.items():
-        ser: NodeInputOptions = ip.to_dict()
+        ser: NodeInputOptions = ip.to_dict(include_on=True)
         node_io_render: NodeInputSerialization = node.render_options.get("io", {}).get(
             ip.uuid, {}
         )
@@ -167,7 +167,7 @@ def _parse_nodeclass_io(node: Node):
         )
 
     for opid, op in outputs.items():
-        ser: NodeOutputOptions = op.to_dict()
+        ser: NodeOutputOptions = op.to_dict(include_on=True)
         node_io_render: NodeOutputSerialization = node.render_options.get("io", {}).get(
             op.uuid, {}
         )
