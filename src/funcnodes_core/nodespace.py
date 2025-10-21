@@ -1,4 +1,4 @@
-from typing import List, Dict, TypedDict, Tuple, Any, Optional
+from typing import List, Dict, TypedDict, Tuple, Any
 import json
 from uuid import uuid4
 import traceback

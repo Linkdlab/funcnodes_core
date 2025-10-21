@@ -37,7 +37,6 @@ from .nodemaker import (
     NodeClassMixin,
     NodeDecorator,
     instance_nodefunction,
-
 )
 from ._logging import FUNCNODES_LOGGER, get_logger, set_log_format
 

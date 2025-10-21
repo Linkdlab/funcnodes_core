@@ -234,7 +234,7 @@ def update_config(config: ConfigType):
     Examples:
       >>> update_config({"env_dir": "env"})
     """
-    global _CONFIG
+    # global _CONFIG
     deep_update_dict(_CONFIG, config, inplace=True)
     write_config(_CONFIG_DIR / "config.json", _CONFIG)
     reload()
@@ -333,8 +333,8 @@ def set_in_test(
     Examples:
       >>> set_in_test()
     """
+    global _BASE_CONFIG_DIR, _IN_NODE_TEST, _CONFIG_CHANGED
     try:
-        global _BASE_CONFIG_DIR, _IN_NODE_TEST, _CONFIG_CHANGED
         in_test = bool(in_test)
         if not in_test:
             raise ValueError("Cannot set in test to False.")

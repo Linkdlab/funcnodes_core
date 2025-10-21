@@ -544,13 +544,19 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
         def my_node(
             a: Annotated[
                 int,
-                fn.InputMeta(name="b", description="A", default=1, does_trigger=False,hidden=True),
+                fn.InputMeta(
+                    name="b",
+                    description="A",
+                    default=1,
+                    does_trigger=False,
+                    hidden=True,
+                ),
             ],
         ) -> Annotated[int, fn.OutputMeta(name="c", description="C")]:
             return a + 1
 
         node = my_node()
-        
+
         import pprint
 
         pprint.pprint(node.serialize())
@@ -561,21 +567,30 @@ class TestDecorator(unittest.IsolatedAsyncioTestCase):
 
         await node
         self.assertEqual(node.outputs["c"].value, 2)
-        
+
     async def test_decorator_with_annotated_type_and_on(self):
         @fn.NodeDecorator(node_id="my_node")
         def my_node(
             a: Annotated[
                 dict[str, int],
-                fn.InputMeta(name="b", description="A", default=1, does_trigger=False,hidden=True, on={"after_set_value": fn.decorator.update_other_io_options(
-                    "k",
-                    list,
-                ) }),
+                fn.InputMeta(
+                    name="b",
+                    description="A",
+                    default=1,
+                    does_trigger=False,
+                    hidden=True,
+                    on={
+                        "after_set_value": fn.decorator.update_other_io_options(
+                            "k",
+                            list,
+                        )
+                    },
+                ),
             ],
             k: str,
         ) -> Annotated[int, fn.OutputMeta(name="c", description="C")]:
             return a[k]
-        
+
         ins1 = my_node()
         ins2 = my_node()
         ins1["a"] < {"k1": 1, "k2": 2}

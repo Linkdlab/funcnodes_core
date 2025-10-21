@@ -308,13 +308,13 @@ class NodeOutputOptions(IOOptions, NodeOutputSerialization, total=False):
     """Typing definition for Node Output options."""
 
 
-
 class InputMeta(FunctionInputParam, NodeInputOptions, total=False):
     pass
 
 
 class OutputMeta(FunctionOutputParam, NodeOutputOptions, total=False):
     pass
+
 
 def generate_value_options(
     _type: SerializedType, value_options: Optional[GenericValueOptions] = None
@@ -430,30 +430,31 @@ class NodeIO(EventEmitterMixin, Generic[NodeIOType]):
                     self.on(event, callback)
 
     @classmethod
-    def filter_serialized_io(cls, serialized_io: InputMeta | OutputMeta) -> InputMeta | OutputMeta:
-        d={}
+    def filter_serialized_io(
+        cls, serialized_io: InputMeta | OutputMeta
+    ) -> InputMeta | OutputMeta:
+        d = {}
         if "name" in serialized_io:
-            d["name"]=serialized_io["name"]
+            d["name"] = serialized_io["name"]
         if "description" in serialized_io:
-            d["description"]=serialized_io["description"]
+            d["description"] = serialized_io["description"]
         if "type" in serialized_io:
-            d["type"]=serialized_io["type"]
+            d["type"] = serialized_io["type"]
         if "allow_multiple" in serialized_io:
-            d["allow_multiple"]=serialized_io["allow_multiple"]
+            d["allow_multiple"] = serialized_io["allow_multiple"]
 
         if "render_options" in serialized_io:
-            d["render_options"]=serialized_io["render_options"]
+            d["render_options"] = serialized_io["render_options"]
         if "value_options" in serialized_io:
-            d["value_options"]=serialized_io["value_options"]
+            d["value_options"] = serialized_io["value_options"]
         if "emit_value_set" in serialized_io:
-            d["emit_value_set"]=serialized_io["emit_value_set"]
+            d["emit_value_set"] = serialized_io["emit_value_set"]
         if "on" in serialized_io:
-            d["on"]=serialized_io["on"]
+            d["on"] = serialized_io["on"]
         if "hidden" in serialized_io:
-            d["hidden"]=serialized_io["hidden"]
+            d["hidden"] = serialized_io["hidden"]
 
         return d
-     
 
     def deserialize(self, data: NodeIOSerialization) -> None:
         if "name" in data:
@@ -920,17 +921,17 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
 
     @classmethod
     def filter_serialized_input(cls, serialized_input: InputMeta) -> InputMeta:
-        d=cls.filter_serialized_io(serialized_input)
-        d["does_trigger"]=serialized_input.get("does_trigger")
-        d["required"]=serialized_input.get("required")
-        d["default"]=serialized_input.get("default", NoValue)
-        d["uuid"]=serialized_input.get(
-                # overwriting the name attribute losses reference,
-                # which is why we use _name (see expose_method if exposedfunctionality)
-                "_name",
-                serialized_input.get("name")
-            )
-        
+        d = cls.filter_serialized_io(serialized_input)
+        d["does_trigger"] = serialized_input.get("does_trigger")
+        d["required"] = serialized_input.get("required")
+        d["default"] = serialized_input.get("default", NoValue)
+        d["uuid"] = serialized_input.get(
+            # overwriting the name attribute losses reference,
+            # which is why we use _name (see expose_method if exposedfunctionality)
+            "_name",
+            serialized_input.get("name"),
+        )
+
         return d
 
     @classmethod
@@ -946,7 +947,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         """
         return cls(
             **cls.filter_serialized_input(serialized_input),
-        )     
+        )
 
     def serialize(self, drop=True) -> NodeInputSerialization:
         """
@@ -980,7 +981,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
             **self.serialize(drop=False),
         )
         if include_on:
-            ser["on"] = deepcopy(self._events)  
+            ser["on"] = deepcopy(self._events)
         if NodeInput.is_default_factory(self._default):
             ser["default"] = self._default
         return ser
@@ -1215,16 +1216,15 @@ class NodeOutput(NodeIO):
         super().__init__(*args, **kwargs)
 
         # self._connected: List[NodeInput] = self._connected
+
     @classmethod
     def filter_serialized_output(cls, serialized_input: OutputMeta) -> OutputMeta:
-        d=cls.filter_serialized_io(serialized_input)
-        d["uuid"]=serialized_input.get("name")
+        d = cls.filter_serialized_io(serialized_input)
+        d["uuid"] = serialized_input.get("name")
         return d
-    
+
     @classmethod
-    def from_serialized_output(
-        cls, serialized_output: OutputMeta
-    ) -> NodeOutput:
+    def from_serialized_output(cls, serialized_output: OutputMeta) -> NodeOutput:
         """
         Creates a NodeOutput instance from serialized output data.
 
@@ -1235,7 +1235,6 @@ class NodeOutput(NodeIO):
             An instance of NodeOutput initialized with the serialized data.
         """
         return cls(
-
             **cls.filter_serialized_output(serialized_output),
         )
 
