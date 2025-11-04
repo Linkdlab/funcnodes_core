@@ -203,7 +203,7 @@ def get_config_dir() -> Path:
     Examples:
       >>> get_config_dir()
     """
-    return _CONFIG_DIR
+    return _CONFIG_DIR.absolute()
 
 
 def get_config() -> ConfigType:
@@ -301,7 +301,7 @@ def reload(funcnodes_config_dir: Optional[Path] = None):
 
     _BASE_CONFIG_DIR = Path(
         os.environ.get("FUNCNODES_CONFIG_DIR", Path.home() / ".funcnodes")
-    )
+    ).absolute()
     _CONFIG = DEFAULT_CONFIG
     _CONFIG_DIR = _BASE_CONFIG_DIR
     check_config_dir()
