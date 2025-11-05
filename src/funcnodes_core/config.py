@@ -203,7 +203,7 @@ def get_config_dir() -> Path:
     Examples:
       >>> get_config_dir()
     """
-    return _CONFIG_DIR
+    return _CONFIG_DIR.absolute()
 
 
 def get_config() -> ConfigType:
@@ -234,7 +234,7 @@ def update_config(config: ConfigType):
     Examples:
       >>> update_config({"env_dir": "env"})
     """
-    global _CONFIG
+    # global _CONFIG
     deep_update_dict(_CONFIG, config, inplace=True)
     write_config(_CONFIG_DIR / "config.json", _CONFIG)
     reload()
@@ -301,7 +301,7 @@ def reload(funcnodes_config_dir: Optional[Path] = None):
 
     _BASE_CONFIG_DIR = Path(
         os.environ.get("FUNCNODES_CONFIG_DIR", Path.home() / ".funcnodes")
-    )
+    ).absolute()
     _CONFIG = DEFAULT_CONFIG
     _CONFIG_DIR = _BASE_CONFIG_DIR
     check_config_dir()
@@ -333,8 +333,8 @@ def set_in_test(
     Examples:
       >>> set_in_test()
     """
+    global _BASE_CONFIG_DIR, _IN_NODE_TEST, _CONFIG_CHANGED
     try:
-        global _BASE_CONFIG_DIR, _IN_NODE_TEST, _CONFIG_CHANGED
         in_test = bool(in_test)
         if not in_test:
             raise ValueError("Cannot set in test to False.")
