@@ -1,4 +1,4 @@
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 
 from .io import (
     NodeInput,
@@ -37,7 +37,6 @@ from .nodemaker import (
     NodeClassMixin,
     NodeDecorator,
     instance_nodefunction,
-
 )
 from ._logging import FUNCNODES_LOGGER, get_logger, set_log_format
 
