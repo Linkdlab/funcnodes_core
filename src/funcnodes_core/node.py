@@ -365,7 +365,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             # check if it is present in the previous
             while ipser["id"] in cls._class_io_serialized:
                 io._uuid = io.uuid + "_"
-                if "___" in io.uuid:
+                if "____" in io.uuid:
                     raise ValueError(
                         f"IO with id {io.uuid} already exists in {cls} automatically generating a new one seems to fail"
                     )
