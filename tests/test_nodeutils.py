@@ -1,14 +1,17 @@
-import unittest
 import time
+from dataclasses import dataclass
+
+import asyncio
+import pytest
+import pytest_asyncio
+
 from funcnodes_core.utils.nodeutils import (
     get_deep_connected_nodeset,
     run_until_complete,
 )
-
 from funcnodes_core.nodemaker import NodeDecorator
 
 import funcnodes_core as fn
-import asyncio
 
 fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
 
@@ -35,139 +38,147 @@ class TKNode(fn.Node):
         self.outputs["op1"].value += 1
 
 
-class TestNodeUtils(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
-        # Create mock nodes with output connections to simulate a graph.
-        self.node1 = identity()
-        self.node2 = identity()
-        self.node3 = identity()
-        # Create connections between nodes.
-        self.node1.outputs["out"].connect(self.node2.inputs["input"])
-        self.node2.outputs["out"].connect(self.node3.inputs["input"])
-        self.node1.inputs["input"].value = 10
+@dataclass
+class NodeChain:
+    node1: fn.Node
+    node2: fn.Node
+    node3: fn.Node
 
-    async def test_get_deep_connected_nodeset(self):
-        # Test the deep collection of connected nodes.
-        nodeset = get_deep_connected_nodeset(self.node1)
-        self.assertIn(self.node1, nodeset)
-        self.assertIn(self.node2, nodeset)
-        self.assertIn(self.node3, nodeset)
 
-    async def test_get_deep_connected_nodeset_with_node_in(self):
-        nodeset = get_deep_connected_nodeset(self.node1, {self.node2})
-        self.assertIn(self.node1, nodeset)
-        self.assertIn(self.node2, nodeset)
-        self.assertNotIn(self.node3, nodeset)
+@pytest_asyncio.fixture
+async def node_chain():
+    node1 = identity()
+    node2 = identity()
+    node3 = identity()
 
-        nodeset = get_deep_connected_nodeset(self.node1, {self.node1})
-        self.assertIn(self.node1, nodeset)
-        self.assertNotIn(self.node2, nodeset)
-        self.assertNotIn(self.node3, nodeset)
+    node1.outputs["out"].connect(node2.inputs["input"])
+    node2.outputs["out"].connect(node3.inputs["input"])
+    node1.inputs["input"].value = 10
 
-    async def test_run_until_complete_all_triggered(self):
-        # Run the function until all nodes are no longer triggering.
-        await run_until_complete(self.node1, self.node2, self.node3)
-        self.assertEqual(self.node1.outputs["out"].value, 10)
-        self.assertEqual(self.node2.outputs["out"].value, 10)
-        self.assertEqual(self.node3.outputs["out"].value, 10)
+    try:
+        yield NodeChain(node1=node1, node2=node2, node3=node3)
+    finally:
+        for node in (node1, node2, node3):
+            node.cleanup()
 
-    async def test_node_progress(self):
-        # Test that the progress is updated as expected.
-        collected = []
 
-        def progress_callback(src, info, *args, **kwargs):
-            collected.append(
-                info,
-            )
+@pytest.mark.asyncio
+async def test_get_deep_connected_nodeset(node_chain: NodeChain):
+    nodeset = get_deep_connected_nodeset(node_chain.node1)
+    assert node_chain.node1 in nodeset
+    assert node_chain.node2 in nodeset
+    assert node_chain.node3 in nodeset
 
-        await self.node1
-        self.node1.on("progress", progress_callback)
 
-        await self.node1
+@pytest.mark.asyncio
+async def test_get_deep_connected_nodeset_with_node_in(node_chain: NodeChain):
+    nodeset = get_deep_connected_nodeset(node_chain.node1, {node_chain.node2})
+    assert node_chain.node1 in nodeset
+    assert node_chain.node2 in nodeset
+    assert node_chain.node3 not in nodeset
 
-        self.assertEqual(
-            len(collected),
-            2,
-            f"There should be two progress updates. One for triggering and one for idle. {collected}",
-        )
-        self.assertEqual(
-            collected[0]["prefix"],
-            "triggering",
-            "The prefix should be 'triggering'.",
-        )
-        self.assertEqual(
-            collected[1]["prefix"],
-            "idle",
-            "The prefix should be 'idle'.",
-        )
+    nodeset = get_deep_connected_nodeset(node_chain.node1, {node_chain.node1})
+    assert node_chain.node1 in nodeset
+    assert node_chain.node2 not in nodeset
+    assert node_chain.node3 not in nodeset
 
-    async def test_trigger_conut(self):
-        node = TKNode(pretrigger_delay=0.1)
+
+@pytest.mark.asyncio
+async def test_run_until_complete_all_triggered(node_chain: NodeChain):
+    await run_until_complete(node_chain.node1, node_chain.node2, node_chain.node3)
+    assert node_chain.node1.outputs["out"].value == 10
+    assert node_chain.node2.outputs["out"].value == 10
+    assert node_chain.node3.outputs["out"].value == 10
+
+
+@pytest.mark.asyncio
+async def test_node_progress(node_chain: NodeChain):
+    collected = []
+
+    def progress_callback(src, info, *args, **kwargs):
+        collected.append(info)
+
+    node1 = node_chain.node1
+    await node1
+    node1.on("progress", progress_callback)
+
+    await node1
+
+    assert len(collected) == 2, (
+        "There should be two progress updates. One for triggering and one for idle."
+    )
+    assert collected[0]["prefix"] == "triggering"
+    assert collected[1]["prefix"] == "idle"
+
+
+@pytest.mark.asyncio
+async def test_trigger_conut():
+    node = TKNode(pretrigger_delay=0.1)
+    await node
+    assert node.outputs["op1"].value == 0
+    node.inputs["ip1"].value = 1
+    node.inputs["ip2"].value = 2
+    await node
+    assert node.outputs["op1"].value == 1
+
+    ts1 = time.time()
+
+    for _ in range(10):
         await node
-        self.assertEqual(node.outputs["op1"].value, 0)
-        node.inputs["ip1"].value = 1
-        node.inputs["ip2"].value = 2
+    te1 = time.time()
+    tw1 = te1 - ts1
+    assert tw1 < 2
+    assert node.outputs["op1"].value == 11
+
+    ts2 = time.time()
+    for i in range(10):
+        node.inputs["ip1"].value = i
         await node
-        self.assertEqual(node.outputs["op1"].value, 1)
+    te2 = time.time()
+    tw2 = te2 - ts2
+    assert node.outputs["op1"].value == 21
+    assert tw2 < 2
 
-        import asyncio
+    while node.in_trigger:
+        await asyncio.sleep(0.0)
 
-        ts1 = time.time()
+    pt = node.outputs["op1"].value
+    node.inputs["ip1"].value = pt
+    ts3 = time.time()
+    while node.in_trigger:
+        await asyncio.sleep(0.01)
+    te3 = time.time()
 
-        for i in range(10):
-            await node
-        te1 = time.time()
-        tw1 = te1 - ts1
-        self.assertLess(tw1, 2)
-        self.assertEqual(node.outputs["op1"].value, 11)
+    tw3 = te3 - ts3
+    assert tw3 < 0.2
+    assert node.outputs["op1"].value == 22
 
-        ts2 = time.time()
-        for i in range(10):
-            node.inputs["ip1"].value = i
-            await node
-        te2 = time.time()
-        tw2 = te2 - ts2
-        self.assertEqual(node.outputs["op1"].value, 21)
-        self.assertLess(tw2, 2)
+    node.inputs["ip1"].value = 10
+    await asyncio.sleep(0.2)  # the delay is large, trigger twice
+    node.inputs["ip2"].value = 20
+    await node
+    assert node.outputs["op1"].value == 24
 
-        while node.in_trigger:
-            await asyncio.sleep(0.0)
+    node.inputs["ip1"].value = 11
+    await asyncio.sleep(0.05)  # the delay is small, trigger once
+    node.inputs["ip2"].value = 21
+    await node
+    assert node.outputs["op1"].value == 25
 
-        pt = node.outputs["op1"].value
-        node.inputs["ip1"].value = pt
-        ts3 = time.time()
-        while node.in_trigger:
-            await asyncio.sleep(0.01)
-        te3 = time.time()
 
-        tw3 = te3 - ts3
-        self.assertLess(tw3, 0.2)
-        self.assertEqual(node.outputs["op1"].value, 22)
+@pytest.mark.asyncio
+async def test_trigger_fast():
+    node = TKNode()
+    node.pretrigger_delay = 0.0
+    node.inputs["ip1"].value = 1
+    node.inputs["ip2"].value = 2
+    await node
+    assert node.outputs["op1"].value == 1
 
-        node.inputs["ip1"].value = 10
-        await asyncio.sleep(0.2)  # the delay is large, trigger twice
-        node.inputs["ip2"].value = 20
+    ts1 = time.time()
+    for _ in range(100):
         await node
-        self.assertEqual(node.outputs["op1"].value, 24)
-
-        node.inputs["ip1"].value = 11
-        await asyncio.sleep(0.05)  # the delay is small, trigger once
-        node.inputs["ip2"].value = 21
-        await node
-        self.assertEqual(node.outputs["op1"].value, 25)
-
-    async def test_trigger_fast(self):
-        node = TKNode()
-        node.pretrigger_delay = 0.0
-        node.inputs["ip1"].value = 1
-        node.inputs["ip2"].value = 2
-        await node
-        self.assertEqual(node.outputs["op1"].value, 1)
-
-        ts1 = time.time()
-        for i in range(100):
-            await node
-        te1 = time.time()
-        tw1 = te1 - ts1
-        self.assertLess(tw1, 0.5)
-        self.assertEqual(node.outputs["op1"].value, 101)
+    te1 = time.time()
+    tw1 = te1 - ts1
+    assert tw1 < 0.5
+    assert node.outputs["op1"].value == 101
