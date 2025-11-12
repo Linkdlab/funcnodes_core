@@ -30,5 +30,3 @@ class TestSetup(unittest.TestCase):
         reload(module)
         reload(funcnodes_basic)
         reload(funcnodes_basic.lists)
-
-        print(list(fnc.lib.SHELFE_REGISTRY.keys()))

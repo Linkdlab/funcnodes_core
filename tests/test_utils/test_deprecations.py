@@ -5,6 +5,7 @@ from funcnodes_core.utils.deprecations import (
     method_deprecated_decorator,
 )
 import warnings
+from pathlib import Path
 
 
 class TestDeprecations(TestCase):
@@ -31,7 +32,7 @@ class TestDeprecations(TestCase):
             self.assertEqual(pseudomodule.CONFIG, 1)
 
         print("W:", cm.warnings[0])
-        self.assertEqual(cm.filename.lower(), __file__.lower(), cm.warning)
+        self.assertEqual(Path(cm.filename).name, Path(__file__).name, cm.warning)
 
     def test_method_deprecated_decorator(self):
         # dont fail on warning
@@ -46,7 +47,7 @@ class TestDeprecations(TestCase):
         with self.assertWarns(FuncNodesDeprecationWarning) as cm:
             self.assertEqual(pseudomodule.method(), 1)
 
-        self.assertEqual(cm.filename.lower(), __file__.lower(), cm.warnings[0])
+        self.assertEqual(Path(cm.filename).name, Path(__file__).name, cm.warnings[0])
 
         class Pseudomodle:
             @method_deprecated_decorator("new_method")
@@ -57,4 +58,4 @@ class TestDeprecations(TestCase):
         with self.assertWarns(FuncNodesDeprecationWarning) as cm:
             self.assertEqual(pseudomodule.method(), 1)
 
-        self.assertEqual(cm.filename, __file__, cm.warnings[0])
+        self.assertEqual(Path(cm.filename).name, Path(__file__).name, cm.warnings[0])

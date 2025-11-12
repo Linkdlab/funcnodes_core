@@ -40,8 +40,3 @@ def teardown():
     from funcnodes_core.node import REGISTERED_NODES
 
     REGISTERED_NODES.clear()
-
-    # remove all registered shelves
-    from funcnodes_core.lib import SHELFE_REGISTRY
-
-    SHELFE_REGISTRY.clear()

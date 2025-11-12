@@ -3,7 +3,7 @@
 import unittest
 import sys
 from funcnodes_core.nodemaker import NodeDecorator
-from funcnodes_core.lib import module_to_shelf, serialize_shelfe
+from funcnodes_core.lib import module_to_shelf, serialize_shelf
 
 import funcnodes_core as fn
 
@@ -60,7 +60,7 @@ class TestLib2(unittest.TestCase):
 
         self.assertEqual(
             expected,
-            serialize_shelfe(
+            serialize_shelf(
                 module_to_shelf(
                     sys.modules[self.__module__],
                     # name has to be set since the module name changes for different test settings

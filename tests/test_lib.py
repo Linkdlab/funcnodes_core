@@ -4,14 +4,13 @@ import unittest
 import sys
 from funcnodes_core.nodemaker import NodeDecorator
 from funcnodes_core.lib import (
+    check_shelf,
     module_to_shelf,
-    serialize_shelfe,
+    serialize_shelf,
     flatten_shelf,
     Shelf,
     Library,
-    ShelfReferenceLost,
 )
-import gc
 
 import funcnodes_core as fn
 
@@ -76,7 +75,7 @@ class TestLib(unittest.TestCase):
 
         self.assertEqual(
             expected,
-            serialize_shelfe(
+            serialize_shelf(
                 module_to_shelf(
                     sys.modules[self.__module__],
                     # name has to be set since the module name changes for different test settings
@@ -108,16 +107,9 @@ class TestLib(unittest.TestCase):
         )
         self.assertEqual([testfunc, testfunc], flatten_shelf(shelf)[0])
 
-    def test_lib_shelf_loseref(self):
-        lib = Library()
-        lib.add_shelf(NODE_SHELF)
-        gc.collect()
-        with self.assertRaises(ShelfReferenceLost):
-            print(lib.shelves)
-
     def test_lib_add_shelf(self):
         lib = Library()
-        s = lib.add_shelf(NODE_SHELF)  # keep the shelf reference
+        s = lib.add_shelf(check_shelf(NODE_SHELF))  # keep the shelf reference
         self.assertEqual(len(lib.shelves), 1)
         self.assertEqual(lib.shelves[0].name, NODE_SHELF["name"])
         self.assertEqual(lib.shelves[0].nodes[0], testfunc)
@@ -126,14 +118,14 @@ class TestLib(unittest.TestCase):
 
     def test_lib_add_shelf_twice(self):
         lib = Library()
-        s = lib.add_shelf(NODE_SHELF)  # keep the shelf reference
+        s = lib.add_shelf(check_shelf(NODE_SHELF))  # keep the shelf reference
         self.assertEqual(len(lib.shelves), 1)
         self.assertEqual(lib.shelves[0].name, NODE_SHELF["name"])
         self.assertEqual(lib.shelves[0].nodes[0], testfunc)
         self.assertEqual(lib.shelves[0].subshelves, [])
         self.assertEqual(s, lib.shelves[0])
 
-        s2 = lib.add_shelf(NODE_SHELF)  # keep the shelf reference
+        s2 = lib.add_shelf(check_shelf(NODE_SHELF))  # keep the shelf reference
         self.assertEqual(len(lib.shelves), 1)
         self.assertEqual(lib.shelves[0].name, NODE_SHELF["name"])
         self.assertEqual(lib.shelves[0].nodes[0], testfunc)
