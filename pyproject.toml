@@ -49,6 +49,8 @@ dev = [
     "yappi>=1.6.10",
     "pytest-timeout",
     "pytest-funcnodes>=0.1.0",
+    "pytest-asyncio",
+    "pytest-cov",
 ]
 
 [dependency-groups]
