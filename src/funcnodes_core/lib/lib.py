@@ -140,7 +140,9 @@ class Library(EventEmitterMixin):
     def __init__(self) -> None:
         # Flat store: key is a path tuple ("Top", "Child", ...)
         self._records: Dict[Tuple[str, ...], _ShelfRecord] = {}
-        self._external_shelf_refs: List[weakref.ref[Shelf]] = []
+        self._external: weakref.WeakValueDictionary[Tuple[str, ...], Shelf] = (
+            weakref.WeakValueDictionary()
+        )
         super().__init__()
 
     def _live_external_shelves(self) -> List[Shelf]:
@@ -174,16 +176,26 @@ class Library(EventEmitterMixin):
     def _child_names(self, parent: Tuple[str, ...]) -> List[str]:
         """Return direct child names under `parent` (order not guaranteed)."""
         n = len(parent)
-        seen: List[str] = []
+        names: List[str] = []
+
+        # internal children
         for key in self._records.keys():
             if len(key) == n + 1 and key[:n] == parent:
-                name = key[-1]
-                if name not in seen:
-                    seen.append(name)
-        return seen
+                nm = key[-1]
+                if nm not in names:
+                    names.append(nm)
+
+        # external children
+        for key in list(self._external.keys()):
+            if len(key) == n + 1 and key[:n] == parent:
+                nm = key[-1]
+                if nm not in names:
+                    names.append(nm)
+
+        return names
 
     def _build_shelf(self, path: Tuple[str, ...]) -> Shelf:
-        """Reconstruct a Shelf (and its subtree) from flat records and REGISTERED_NODES."""
+        """Reconstruct a Shelf (and its subtree) from flat records + weak externals."""
         rec = self._records.get(path)
         if rec is None:
             raise ValueError(f"shelf {'/'.join(path)} does not exist")
@@ -195,11 +207,29 @@ class Library(EventEmitterMixin):
             if node_cls is not None:
                 nodes.append(node_cls)
 
-        # Build children
+        # Build children: internal (recursively) + external (weak)
         subshelves: List[Shelf] = []
         for child_name in self._child_names(path):
             child_path = path + (child_name,)
-            subshelves.append(self._build_shelf(child_path))
+
+            # external child?
+            ext = self._external.get(child_path)
+            if ext is not None:
+                subshelves.append(
+                    ext
+                )  # do NOT set parent; avoid mutating external object
+                continue
+
+            # internal child (must exist if not external)
+            if child_path in self._records:
+                child = self._build_shelf(child_path)
+                # set parent only for internal children we constructed
+                child.parent_shelf = None  # avoid stale parent
+                subshelves.append(child)
+                continue
+
+            # Shouldn't happen (name came from union of internal/external)
+            # Skip silently to be defensive.
 
         shelf = Shelf(
             name=rec.name,
@@ -207,9 +237,10 @@ class Library(EventEmitterMixin):
             nodes=nodes,
             subshelves=subshelves,
         )
-        # fix parent pointers
+        # Set parent for internal children only (those we created above)
         for sub in shelf.subshelves:
-            sub.parent_shelf = shelf
+            if (path + (sub.name,)) not in self._external:
+                sub.parent_shelf = shelf
         return shelf
 
     def _top_paths(self) -> List[Tuple[str, ...]]:
@@ -250,7 +281,7 @@ class Library(EventEmitterMixin):
     def shelves(self) -> List[Shelf]:
         # Rebuild complete trees for all top-level shelves (snapshots).
         internal_shelves = [self._build_shelf(p) for p in self._top_paths()]
-        external_shelves = self._live_external_shelves()
+        external_shelves = [s for (p, s) in list(self._external.items()) if len(p) == 1]
         return internal_shelves + external_shelves
 
     @emit_after()
@@ -266,26 +297,48 @@ class Library(EventEmitterMixin):
         return self._build_shelf((shelf.name,))
 
     @emit_after()
-    def remove_shelf(self, shelf: Shelf):
+    def remove_shelf(self, shelf: Union[Shelf, weakref.ref[Shelf]]):
         """
         Remove a top-level shelf by name (and all its descendants).
         Mirrors previous behavior where top-level shelves are keyed by name.
         """
+        if isinstance(shelf, weakref.ref):
+            shelf = shelf()
+        if shelf is None:
+            return  # shelf is already garbage-collected
         if not isinstance(shelf, Shelf):
-            raise ValueError("shelf must be a Shelf")
-        self._remove_subtree((shelf.name,))
+            raise ValueError("shelf must be a Shelf or a weak reference to a Shelf")
+        top = (shelf.name,)
+        if top in self._records:
+            self._remove_subtree(top)
+            return
+        if top in self._external:
+            try:
+                del self._external[top]
+            except KeyError:
+                pass
+            return
+        raise ValueError("Shelf does not exist")
 
     @emit_after()
     def remove_shelf_path(self, path: List[str]):
         """Remove the shelf (and its subtree) at an explicit path."""
         path_t = _norm_path(path)
+        # unmount weak shelf if present (works for top-level or nested)
+        if path_t in self._external:
+            try:
+                del self._external[path_t]
+            except KeyError:
+                pass
+            return
+        # otherwise remove internal subtree
         self._remove_subtree(path_t)
 
     def full_serialize(self) -> FullLibJSON:
         """Serialize the entire library into a JSON-friendly structure."""
-        top = [self._build_shelf(p) for p in self._top_paths()]
-        top.extend(self._live_external_shelves())
-        return {"shelves": [serialize_shelf(s) for s in top]}
+        internals = [self._build_shelf(p) for p in self._top_paths()]
+        externals = [s for (p, s) in list(self._external.items()) if len(p) == 1]
+        return {"shelves": [serialize_shelf(s) for s in internals + externals]}
 
     def _repr_json_(self) -> FullLibJSON:
         return self.full_serialize()
@@ -323,13 +376,14 @@ class Library(EventEmitterMixin):
                 hits.append(list(key))
                 if not all:
                     return hits
-        # external
-        for ext in self._live_external_shelves():
-            subpaths = deep_find_node(ext, nodeid, all=all)
-            if subpaths:
-                hits.extend(subpaths)
+        # all weak mounts
+        for path, shelf in list(self._external.items()):
+            subpaths = deep_find_node(shelf, nodeid, all=all)
+            for sp in subpaths:
+                # Replace the external shelf's own root with the mount alias (path[-1])
+                hits.append(list(path) + sp[1:])
                 if not all:
-                    return hits[:1]
+                    return hits
         return hits
 
     def has_node_id(self, nodeid: str) -> bool:
@@ -373,7 +427,11 @@ class Library(EventEmitterMixin):
         return node_cls
 
     @emit_after()
-    def add_external_shelf(self, shelf: Union[Shelf, weakref.ref[Shelf]]):
+    def add_external_shelf(
+        self,
+        shelf: Union[Shelf, weakref.ref[Shelf]],
+        mount: str | List[str] | None = None,
+    ):
         """
         Register an externally owned Shelf via weak reference.
         It will appear in `shelves` and `full_serialize` while alive,
@@ -385,8 +443,56 @@ class Library(EventEmitterMixin):
             return  # shelf is already garbage-collected
         if not isinstance(shelf, Shelf):
             raise ValueError("shelf must be a Shelf or a weak reference to a Shelf")
-        self._external_shelf_refs.append(weakref.ref(shelf))
-        # return the live shelf to mirror add_shelf's behavior of returning a shelf snapshot
+
+        path = _norm_path(mount) if mount is not None else (shelf.name,)
+        if len(path) != 1:
+            raise ValueError("use add_subshelf_weak(...) to mount under a parent path")
+
+        if path in self._external or path in self._records:
+            raise ValueError(f"top-level shelf '{path[0]}' already exists")
+
+        self._external[path] = shelf
+        return shelf
+
+    @emit_after()
+    def add_subshelf_weak(
+        self,
+        shelf: Union[Shelf, weakref.ref[Shelf]],
+        parent: str | List[str],
+        alias: Optional[str] = None,
+    ):
+        """
+        Mount an external Shelf weakly under an existing INTERNAL parent path.
+
+        The child name will be `alias` if provided, else `shelf.name`.
+        The full mount path is `tuple(parent) + (child_name,)`.
+
+        Notes:
+        - Parent must exist as an internal shelf (in _records).
+        - The final path must not collide with an internal shelf or another weak shelf.
+        """
+        if isinstance(shelf, weakref.ref):
+            shelf = shelf()
+        if shelf is None:
+            return  # shelf is already garbage-collected
+        if not isinstance(shelf, Shelf):
+            raise ValueError("shelf must be a Shelf or a weak reference to a Shelf")
+
+        parent_t = _norm_path(parent)
+        if parent_t not in self._records:
+            raise ValueError("parent path must refer to an existing internal shelf")
+
+        child_name = alias if alias is not None else shelf.name
+        if not child_name:
+            raise ValueError("alias/name must be non-empty")
+
+        path = parent_t + (child_name,)
+        if path in self._records or path in self._external:
+            raise ValueError(
+                f"child '{child_name}' already exists under {'/'.join(parent_t)}"
+            )
+
+        self._external[path] = shelf
         return shelf
 
 
@@ -450,7 +556,7 @@ def flatten_shelf(shelf: Shelf) -> Tuple[List[Type[Node]], List[Shelf]]:
 def deep_find_node(shelf: Shelf, nodeid: str, all=True) -> List[List[str]]:
     paths: List[List[str]] = []
     try:
-        get_node_in_shelf(shelf, nodeid)  # raises NodeClassNotFoundError if absent
+        get_node_in_shelf(shelf, nodeid)
         paths.append([shelf.name])
         if not all:
             return paths
@@ -459,9 +565,9 @@ def deep_find_node(shelf: Shelf, nodeid: str, all=True) -> List[List[str]]:
 
     for subshelf in shelf.subshelves:
         subpaths = deep_find_node(subshelf, nodeid, all=all)
+        for p in subpaths:
+            p.insert(0, shelf.name)
         if subpaths:
-            for p in subpaths:
-                p.insert(0, shelf.name)
             paths.extend(subpaths)
             if not all:
                 return paths[:1]
