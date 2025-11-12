@@ -1,8 +1,9 @@
 from __future__ import annotations
-from typing import List, Optional, TypedDict, Dict, Type, Tuple, Sequence
+from typing import List, Optional, TypedDict, Dict, Type, Tuple, Sequence, Union
 from funcnodes_core.node import Node, SerializedNodeClass, REGISTERED_NODES
 from funcnodes_core.utils.serialization import JSONEncoder, Encdata
 from dataclasses import dataclass, field
+import weakref
 from ..eventmanager import EventEmitterMixin, emit_after
 
 
@@ -139,7 +140,21 @@ class Library(EventEmitterMixin):
     def __init__(self) -> None:
         # Flat store: key is a path tuple ("Top", "Child", ...)
         self._records: Dict[Tuple[str, ...], _ShelfRecord] = {}
+        self._external_shelf_refs: List[weakref.ref[Shelf]] = []
         super().__init__()
+
+    def _live_external_shelves(self) -> List[Shelf]:
+        """Return alive external shelves and prune dead refs."""
+        alive_refs: List[weakref.ref[Shelf]] = []
+        shelves: List[Shelf] = []
+        for r in self._external_shelf_refs:
+            s = r()
+            if s is not None:
+                shelves.append(s)
+                alive_refs.append(r)
+        if len(alive_refs) != len(self._external_shelf_refs):
+            self._external_shelf_refs = alive_refs
+        return shelves
 
     # -------- materialization helpers (private) --------
 
@@ -234,7 +249,9 @@ class Library(EventEmitterMixin):
     @property
     def shelves(self) -> List[Shelf]:
         # Rebuild complete trees for all top-level shelves (snapshots).
-        return [self._build_shelf(p) for p in self._top_paths()]
+        internal_shelves = [self._build_shelf(p) for p in self._top_paths()]
+        external_shelves = self._live_external_shelves()
+        return internal_shelves + external_shelves
 
     @emit_after()
     def add_shelf(self, shelf: Shelf):
@@ -267,6 +284,7 @@ class Library(EventEmitterMixin):
     def full_serialize(self) -> FullLibJSON:
         """Serialize the entire library into a JSON-friendly structure."""
         top = [self._build_shelf(p) for p in self._top_paths()]
+        top.extend(self._live_external_shelves())
         return {"shelves": [serialize_shelf(s) for s in top]}
 
     def _repr_json_(self) -> FullLibJSON:
@@ -299,11 +317,19 @@ class Library(EventEmitterMixin):
         if REGISTERED_NODES.get(nodeid) is None:
             return []
         hits: List[List[str]] = []
+        # internal
         for key, rec in self._records.items():
             if nodeid in rec.nodes_ref:
                 hits.append(list(key))
                 if not all:
-                    break
+                    return hits
+        # external
+        for ext in self._live_external_shelves():
+            subpaths = deep_find_node(ext, nodeid, all=all)
+            if subpaths:
+                hits.extend(subpaths)
+                if not all:
+                    return hits[:1]
         return hits
 
     def has_node_id(self, nodeid: str) -> bool:
@@ -345,6 +371,23 @@ class Library(EventEmitterMixin):
             # Not registered anymore — treat as not found.
             raise NodeClassNotFoundError(f"Node with id '{nodeid}' not found")
         return node_cls
+
+    @emit_after()
+    def add_external_shelf(self, shelf: Union[Shelf, weakref.ref[Shelf]]):
+        """
+        Register an externally owned Shelf via weak reference.
+        It will appear in `shelves` and `full_serialize` while alive,
+        and disappear automatically once garbage-collected.
+        """
+        if isinstance(shelf, weakref.ref):
+            shelf = shelf()
+        if shelf is None:
+            return  # shelf is already garbage-collected
+        if not isinstance(shelf, Shelf):
+            raise ValueError("shelf must be a Shelf or a weak reference to a Shelf")
+        self._external_shelf_refs.append(weakref.ref(shelf))
+        # return the live shelf to mirror add_shelf's behavior of returning a shelf snapshot
+        return shelf
 
 
 def check_shelf(shelf: Shelf, parent_id: Optional[str] = None) -> Shelf:
@@ -405,23 +448,23 @@ def flatten_shelf(shelf: Shelf) -> Tuple[List[Type[Node]], List[Shelf]]:
 
 
 def deep_find_node(shelf: Shelf, nodeid: str, all=True) -> List[List[str]]:
-    paths = []
+    paths: List[List[str]] = []
     try:
-        i, node = get_node_in_shelf(shelf, nodeid)
+        get_node_in_shelf(shelf, nodeid)  # raises NodeClassNotFoundError if absent
         paths.append([shelf.name])
         if not all:
             return paths
-    except ValueError:
+    except NodeClassNotFoundError:
         pass
 
     for subshelf in shelf.subshelves:
-        path = deep_find_node(subshelf, nodeid)
-        if len(path) > 0:
-            for p in path:
+        subpaths = deep_find_node(subshelf, nodeid, all=all)
+        if subpaths:
+            for p in subpaths:
                 p.insert(0, shelf.name)
-            paths.extend(path)
+            paths.extend(subpaths)
             if not all:
-                break
+                return paths[:1]
     return paths
 
 
