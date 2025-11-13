@@ -1,44 +1,41 @@
-import unittest
 import os
 import warnings
 
+import pytest
+import pytest_funcnodes
 
-class TestDecorator(unittest.IsolatedAsyncioTestCase):
-    def test_in_node_test_varaset(self):
-        import funcnodes_core as fn
+import funcnodes_core as fn
+from funcnodes_core.config import FuncNodesDeprecationWarning
 
+
+def test_in_node_test_varaset():
+    # assert a warning is issued when accessing the deprecated attribute
+    with pytest.warns(FuncNodesDeprecationWarning):
         fn.config.set_in_test()
 
-        self.assertTrue(fn.config.get_in_test())
-        self.assertTrue(fn.config._IN_NODE_TEST)
-        pid = os.getpid()
-        self.assertEqual(
-            os.path.basename(fn.config._BASE_CONFIG_DIR), "funcnodes_test" + f"_{pid}"
-        )
+    assert pytest_funcnodes.get_in_test()
+    pid = os.getpid()
+    assert os.path.basename(fn.config._BASE_CONFIG_DIR) == f"funcnodes_test_{pid}"
 
-    def test_config_access_deprecation(self):
-        import funcnodes_core as fn
 
-        # make sure a deprecation warning is issued when accessing the deprecated attribute
-        with self.assertWarns(DeprecationWarning):
-            fn.config.CONFIG
-        # make sure a deprecation warning is issued when accessing the deprecated attribute
-        with self.assertWarns(DeprecationWarning):
-            fn.config.CONFIG_DIR
+def test_config_access_deprecation():
+    # make sure a deprecation warning is issued when accessing the deprecated attributes
+    with pytest.warns(DeprecationWarning):
+        fn.config.CONFIG
+    with pytest.warns(DeprecationWarning):
+        fn.config.CONFIG_DIR
+    with pytest.warns(DeprecationWarning):
+        fn.config.BASE_CONFIG_DIR
 
-        with self.assertWarns(DeprecationWarning):
-            fn.config.BASE_CONFIG_DIR
 
-    def test_no_deprecation_warning(self):
-        # make sure no deprecation warning is issued when accessing the new attribute
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", DeprecationWarning)
+def test_no_deprecation_warning():
+    # make sure no deprecation warning is issued when accessing the new attribute
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
 
-    def test_config_not_laoded(self):
-        import funcnodes_core as fn
 
-        fn.config.set_in_test()
-        self.assertTrue(
-            fn.config._CONFIG_CHANGED,
-            f"Expected {fn.config._CONFIG_CHANGED} to be True",
-        )
+def test_config_not_laoded():
+    assert not fn.config._CONFIG_CHANGED, "Expected _CONFIG_CHANGED to be False"
+
+    pytest_funcnodes.set_in_test()
+    assert fn.config._CONFIG_CHANGED, "Expected _CONFIG_CHANGED to be True"

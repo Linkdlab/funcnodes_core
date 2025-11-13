@@ -7,9 +7,10 @@ from .utils.plugins_types import RenderOptions
 from .utils.files import write_json_secure
 from dotenv import load_dotenv
 from exposedfunctionality.function_parser.types import type_to_string
-from .utils.deprecations import (
+from .utils.deprecations import (  # noqa: F401
     path_module_attribute_to_getter,
     method_deprecated_decorator,
+    FuncNodesDeprecationWarning,  # noqa: F401
 )
 
 load_dotenv(override=True)
@@ -303,9 +304,9 @@ def reload(funcnodes_config_dir: Optional[Path] = None):
 
 
 def get_in_test() -> bool:
-    from pytest_funcnodes import get_in_test
+    from pytest_funcnodes import get_in_test as pytest_get_in_test
 
-    return get_in_test()
+    return pytest_get_in_test()
 
 
 get_in_test = method_deprecated_decorator(alternative="pytest_funcnodes.get_in_test")(
@@ -327,6 +328,10 @@ def set_in_test(
         clear=clear, add_pid=add_pid, config=config, fail_on_warnings=fail_on_warnings
     )
 
+
+set_in_test = method_deprecated_decorator(alternative="pytest_funcnodes.set_in_test")(
+    set_in_test
+)
 
 CONFIG = path_module_attribute_to_getter(
     __name__,
