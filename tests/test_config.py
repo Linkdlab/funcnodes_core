@@ -6,16 +6,20 @@ import pytest_funcnodes
 
 import funcnodes_core as fn
 from funcnodes_core.config import FuncNodesDeprecationWarning
+from pytest_funcnodes import teardown
 
 
 def test_in_node_test_varaset():
-    # assert a warning is issued when accessing the deprecated attribute
-    with pytest.warns(FuncNodesDeprecationWarning):
-        fn.config.set_in_test()
+    try:
+        # assert a warning is issued when accessing the deprecated attribute
+        with pytest.warns(FuncNodesDeprecationWarning):
+            fn.config.set_in_test()
 
-    assert pytest_funcnodes.get_in_test()
-    pid = os.getpid()
-    assert os.path.basename(fn.config._BASE_CONFIG_DIR) == f"funcnodes_test_{pid}"
+        assert pytest_funcnodes.get_in_test()
+        pid = os.getpid()
+        assert os.path.basename(fn.config._BASE_CONFIG_DIR) == f"funcnodes_test_{pid}"
+    finally:
+        teardown()
 
 
 def test_config_access_deprecation():
@@ -35,7 +39,10 @@ def test_no_deprecation_warning():
 
 
 def test_config_not_laoded():
-    assert not fn.config._CONFIG_CHANGED, "Expected _CONFIG_CHANGED to be False"
+    try:
+        assert not fn.config._CONFIG_CHANGED, "Expected _CONFIG_CHANGED to be False"
 
-    pytest_funcnodes.set_in_test()
-    assert fn.config._CONFIG_CHANGED, "Expected _CONFIG_CHANGED to be True"
+        pytest_funcnodes.set_in_test()
+        assert fn.config._CONFIG_CHANGED, "Expected _CONFIG_CHANGED to be True"
+    finally:
+        teardown()

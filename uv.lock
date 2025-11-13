@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.11"
 resolution-markers = [
     "sys_platform != 'emscripten'",
@@ -462,6 +462,7 @@ source = { editable = "." }
 dependencies = [
     { name = "dill" },
     { name = "exposedfunctionality" },
+    { name = "pytest-funcnodes" },
     { name = "python-dotenv" },
     { name = "setuptools" },
     { name = "tqdm" },
@@ -500,6 +501,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.25.3" },
     { name = "pytest-cov", marker = "extra == 'dev'" },
+    { name = "pytest-funcnodes", specifier = ">=0.4.1" },
     { name = "pytest-funcnodes", marker = "extra == 'dev'", specifier = ">=0.1.0" },
     { name = "pytest-timeout", marker = "extra == 'dev'" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6.1" },
@@ -948,16 +950,16 @@ wheels = [
 
 [[package]]
 name = "pytest-funcnodes"
-version = "0.1.0"
+version = "0.4.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "funcnodes-core" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0a/68/367b0a5fe8c0416cf86f7412c8219b9e5bb1392754fc1f9d1f4f3934cee0/pytest_funcnodes-0.1.0.tar.gz", hash = "sha256:e649ae259dc6bc2b9d6912b00337ae141d07d9ad820598872330282672646bd6", size = 39691, upload-time = "2025-03-19T11:18:01.914Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3b/43/0ff28c2e7e93070f61eec7314e21ffd9ea32eab45edd0486617df17ddf29/pytest_funcnodes-0.4.1.tar.gz", hash = "sha256:30e515dabcad19fc109424dcf651445db1ee4136d92db07af423efcd50d7c15f", size = 41673, upload-time = "2025-11-13T13:46:55.46Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/20/b6/cda2ed8d106c09d843982fe01d4c0ef9e2182fdf0bce42c5ca9df78d61bd/pytest_funcnodes-0.1.0-py3-none-any.whl", hash = "sha256:0225721da35b18dd66def334c3fa55cd4e0ee99cf5fb4f801c72e1d2d0560128", size = 28368, upload-time = "2025-03-19T11:18:00.718Z" },
+    { url = "https://files.pythonhosted.org/packages/81/30/bde6a9dfaed4a7c8c79603ec9c1a895b632e01fbe6196e9d5acbedc7fa36/pytest_funcnodes-0.4.1-py3-none-any.whl", hash = "sha256:c08e1272ea4742c24102520353862b14849ecc55e607d61b89132a798a1664b4", size = 30331, upload-time = "2025-11-13T13:46:54.38Z" },
 ]
 
 [[package]]

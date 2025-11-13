@@ -2,9 +2,8 @@ import time
 import os
 import pathlib
 
-import pytest
 import funcnodes_core as fn
-from funcnodes_core.testing import setup, teardown
+from pytest_funcnodes import funcnodes_test
 
 try:
     import yappi
@@ -33,16 +32,7 @@ class yappicontext:
             yappi.clear_stats()
 
 
-@pytest.fixture(autouse=True)
-def _configure_testing():
-    setup()
-    try:
-        yield
-    finally:
-        teardown()
-
-
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_triggerspeeds():
     @fn.NodeDecorator("TestTriggerSpeed test_triggerspeeds")
     async def _add_one(input: int) -> int:

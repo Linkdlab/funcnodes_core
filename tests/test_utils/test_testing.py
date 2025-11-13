@@ -1,6 +1,8 @@
 from unittest import TestCase
 
-from funcnodes_core import testing, FUNCNODES_LOGGER
+from funcnodes_core import FUNCNODES_LOGGER
+
+import pytest_funcnodes as testing
 
 
 class TestTesting(TestCase):

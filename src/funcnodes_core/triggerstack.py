@@ -1,5 +1,5 @@
 import asyncio
-from funcnodes_core import config
+import pytest_funcnodes
 
 
 class TriggerStack:
@@ -32,7 +32,7 @@ class TriggerStack:
             t = self._stack.pop()
 
             # check if the task has an exception
-            if t.exception() and config.get_in_test():
+            if t.exception() and pytest_funcnodes.get_in_test():
                 # if it does, raise the exception
                 raise t.exception()
 

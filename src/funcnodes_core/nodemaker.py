@@ -16,7 +16,7 @@ from .node import (
     NodeMeta,
 )
 from .io import NodeInput, NodeOutput
-from functools import wraps, partial
+from functools import wraps
 from .utils.functions import (
     ExecutorWrapper,
     make_run_in_new_thread,
@@ -33,6 +33,7 @@ except ImportError:
     from typing_extensions import Unpack
 
 from ._logging import FUNCNODES_LOGGER
+from .utils.wrapper import signaturewrapper
 
 
 def node_class_maker(
@@ -308,14 +309,17 @@ class NodeClassMixinInstanceNodeFunction:
         )  # default name is the method name
 
         # create a partial method that is bound to the nodeclassmixininst
-        partial_method = wraps(self.function.function)(
-            partial(self.function.function, self.instance)
-        )
+
+        @signaturewrapper(self.function.function)
+        def _func(*args, **kwargs):
+            return self.function.function(self.instance, *args, **kwargs)
+
+        # partial_method = wraps(self.function.function)(
+        #     staticmethod(partial(self.function.function, self.instance))
+        # )
 
         # create the node class
-        nodeclass: Type[NodeClassNode] = NodeDecorator(**_node_create_params)(
-            partial_method
-        )
+        nodeclass: Type[NodeClassNode] = NodeDecorator(**_node_create_params)(_func)
 
         if not issubclass(nodeclass, NodeClassNode):
             raise ValueError("node class is not a subclass of NodeClassNode")

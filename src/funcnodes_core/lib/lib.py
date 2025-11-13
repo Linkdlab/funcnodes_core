@@ -285,7 +285,7 @@ class Library(EventEmitterMixin):
         return internal_shelves + external_shelves
 
     @emit_after()
-    def add_shelf(self, shelf: Shelf):
+    def add_shelf(self, shelf: Shelf) -> Shelf:
         """
         Merge or insert a complete Shelf tree.
         Top-level uniqueness is by name; children uniqueness is by (parent path, name).
@@ -437,6 +437,7 @@ class Library(EventEmitterMixin):
         It will appear in `shelves` and `full_serialize` while alive,
         and disappear automatically once garbage-collected.
         """
+
         if isinstance(shelf, weakref.ref):
             shelf = shelf()
         if shelf is None:

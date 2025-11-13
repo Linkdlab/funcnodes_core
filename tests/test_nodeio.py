@@ -10,16 +10,19 @@ import json
 from funcnodes_core.io import raise_allow_connections, NodeAlreadyDefinedError, NoValue
 
 import funcnodes_core as fn
-
-fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+from pytest_funcnodes import setup, teardown
 
 
 class TestNodeIO(unittest.TestCase):
     def setUp(self):
+        setup()
         self.input_1 = NodeInput(id="input1")
         self.output_1 = NodeOutput(id="output1")
         self.input_2 = NodeInput(id="input2")
         self.output_2 = NodeOutput(id="output2")
+
+    def tearDown(self):
+        teardown()
 
     def test_create_node_io(self):
         self.assertEqual(self.input_1.name, "input1")
@@ -246,10 +249,14 @@ class TestNodeIO(unittest.TestCase):
 
 class RaiseAllowConnectionsTest(unittest.TestCase):
     def setUp(self):
+        setup()
         self.ip1 = NodeInput(name="ip1")
         self.ip2 = NodeInput(name="ip2")
         self.op1 = NodeOutput(name="op1")
         self.op2 = NodeOutput(name="op2")
+
+    def tearDown(self):
+        teardown()
 
     def test_ip2ip(self):
         with self.assertRaises(NodeConnectionError):
@@ -284,6 +291,12 @@ def return_no_value():
 
 
 class TestNoValue(unittest.TestCase):
+    def setUp(self):
+        setup()
+
+    def tearDown(self):
+        teardown()
+
     def test_no_singleton(self):
         n1 = NoValue
         n2 = NoValue
@@ -308,11 +321,24 @@ class TestNoValue(unittest.TestCase):
 
     def test_singleton_multiprocess(self):
         import multiprocessing
+        import warnings
 
-        pool = multiprocessing.Pool(1)
-
-        res = pool.apply(return_no_value)
-        self.assertIs(res, NoValue)
+        # Suppress fork() deprecation warning for this test
+        # The test works correctly with fork(), the warning is about multi-threaded safety
+        # which doesn't affect this simple test case
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                category=DeprecationWarning,
+                message=".*multi-threaded.*fork.*",
+            )
+            pool = multiprocessing.Pool(1)
+            try:
+                res = pool.apply(return_no_value)
+                self.assertIs(res, NoValue)
+            finally:
+                pool.close()
+                pool.join()
 
     def test_singleton_picklesave(self):
         import pickle
@@ -324,7 +350,10 @@ class TestNoValue(unittest.TestCase):
 
 class TestIOExamples(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+        setup()
+
+    def tearDown(self):
+        teardown()
 
     async def test_io1(self):
         class IOModNode(fn.Node):

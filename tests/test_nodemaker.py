@@ -11,9 +11,7 @@ from funcnodes_core.nodemaker import (
 from funcnodes_core import get_nodeclass
 import asyncio
 
-import funcnodes_core as fn
-
-fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+from pytest_funcnodes import setup, teardown
 
 
 class TestNodeClassMaker(unittest.IsolatedAsyncioTestCase):
@@ -23,6 +21,12 @@ class TestNodeClassMaker(unittest.IsolatedAsyncioTestCase):
     The node_class_maker function creates a new NodeClass type given an identifier and a callable.
     It also decorates the callable if it's not already exposed as a method.
     """
+
+    def setUp(self):
+        setup()
+
+    def tearDown(self):
+        teardown()
 
     def test_node_class_maker_creates_class_with_correct_attributes(self):
         # Test if node_class_maker correctly creates a NodeClass with expected attributes

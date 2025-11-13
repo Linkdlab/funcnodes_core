@@ -2,8 +2,6 @@ import time
 from dataclasses import dataclass
 
 import asyncio
-import pytest
-import pytest_asyncio
 
 from funcnodes_core.utils.nodeutils import (
     get_deep_connected_nodeset,
@@ -13,7 +11,8 @@ from funcnodes_core.nodemaker import NodeDecorator
 
 import funcnodes_core as fn
 
-fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+from pytest_funcnodes import funcnodes_test
+import pytest
 
 
 @NodeDecorator("dummy_nodefor testnodeutils")
@@ -45,7 +44,7 @@ class NodeChain:
     node3: fn.Node
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 async def node_chain():
     node1 = identity()
     node2 = identity()
@@ -62,7 +61,7 @@ async def node_chain():
             node.cleanup()
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_get_deep_connected_nodeset(node_chain: NodeChain):
     nodeset = get_deep_connected_nodeset(node_chain.node1)
     assert node_chain.node1 in nodeset
@@ -70,7 +69,7 @@ async def test_get_deep_connected_nodeset(node_chain: NodeChain):
     assert node_chain.node3 in nodeset
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_get_deep_connected_nodeset_with_node_in(node_chain: NodeChain):
     nodeset = get_deep_connected_nodeset(node_chain.node1, {node_chain.node2})
     assert node_chain.node1 in nodeset
@@ -83,7 +82,7 @@ async def test_get_deep_connected_nodeset_with_node_in(node_chain: NodeChain):
     assert node_chain.node3 not in nodeset
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_run_until_complete_all_triggered(node_chain: NodeChain):
     await run_until_complete(node_chain.node1, node_chain.node2, node_chain.node3)
     assert node_chain.node1.outputs["out"].value == 10
@@ -91,7 +90,7 @@ async def test_run_until_complete_all_triggered(node_chain: NodeChain):
     assert node_chain.node3.outputs["out"].value == 10
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_node_progress(node_chain: NodeChain):
     collected = []
 
@@ -111,7 +110,7 @@ async def test_node_progress(node_chain: NodeChain):
     assert collected[1]["prefix"] == "idle"
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_trigger_conut():
     node = TKNode(pretrigger_delay=0.1)
     await node
@@ -166,7 +165,7 @@ async def test_trigger_conut():
     assert node.outputs["op1"].value == 25
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_trigger_fast():
     node = TKNode()
     node.pretrigger_delay = 0.0
