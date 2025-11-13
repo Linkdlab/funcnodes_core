@@ -2,41 +2,24 @@
 Helper functions for testing.
 """
 
-import logging
-
-from .config import set_in_test, get_in_test
-from ._logging import FUNCNODES_LOGGER, _update_logger_handlers
+from .utils.deprecations import method_deprecated_decorator
 
 
 def setup():
-    if not get_in_test():
-        set_in_test()
-    logging.basicConfig(level=logging.DEBUG)
-    _update_logger_handlers(FUNCNODES_LOGGER)
+    from pytest_funcnodes import setup
+
+    return setup()
+
+
+setup = method_deprecated_decorator(alternative="pytest_funcnodes.setup")(setup)
 
 
 def teardown():
-    """This can be called after each test, which will do a little cleanup."""
+    from pytest_funcnodes import teardown
 
-    # remove all from the "funcnodes" logger
+    return teardown()
 
-    # get all logger that start with "funcnodes."
 
-    loggers = [
-        name
-        for name in logging.root.manager.loggerDict
-        if name.startswith("funcnodes.")
-    ] + ["funcnodes"]
-
-    loggers = [logging.getLogger(name) for name in loggers]
-
-    for logger in loggers:
-        # handlers have to be accessed as a list,
-        # because they are removed during iteration
-        for handler in list(logger.handlers):
-            handler.close()
-
-    # remove all registered nodes
-    from funcnodes_core.node import REGISTERED_NODES
-
-    REGISTERED_NODES.clear()
+teardown = method_deprecated_decorator(alternative="pytest_funcnodes.teardown")(
+    teardown
+)

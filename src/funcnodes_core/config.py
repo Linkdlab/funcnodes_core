@@ -7,14 +7,9 @@ from .utils.plugins_types import RenderOptions
 from .utils.files import write_json_secure
 from dotenv import load_dotenv
 from exposedfunctionality.function_parser.types import type_to_string
-import tempfile
-import shutil
-import sys
-import warnings
 from .utils.deprecations import (
     path_module_attribute_to_getter,
     method_deprecated_decorator,
-    FuncNodesDeprecationWarning,
 )
 
 load_dotenv(override=True)
@@ -307,79 +302,30 @@ def reload(funcnodes_config_dir: Optional[Path] = None):
     check_config_dir()
 
 
-_IN_NODE_TEST = False
-
-IN_NODE_TEST = False
-
-
 def get_in_test() -> bool:
-    return _IN_NODE_TEST
+    from pytest_funcnodes import get_in_test
+
+    return get_in_test()
+
+
+get_in_test = method_deprecated_decorator(alternative="pytest_funcnodes.get_in_test")(
+    get_in_test
+)
 
 
 def set_in_test(
-    in_test: Literal[True] = True,
+    in_test: Literal[True] = True,  # noqa: F841  # required for setter
     *,
     clear: bool = True,
     add_pid: bool = True,
     config: Optional[ConfigType] = None,
     fail_on_warnings: Optional[List[Warning]] = None,
 ):
-    """
-    Sets the configuration to be in test mode.
+    from pytest_funcnodes import set_in_test as pytest_set_in_test
 
-    Returns:
-      None
-
-    Examples:
-      >>> set_in_test()
-    """
-    global _BASE_CONFIG_DIR, _IN_NODE_TEST, _CONFIG_CHANGED
-    try:
-        in_test = bool(in_test)
-        if not in_test:
-            raise ValueError("Cannot set in test to False.")
-        if in_test == _IN_NODE_TEST:  # no change
-            return
-        _IN_NODE_TEST = True
-
-        if fail_on_warnings is None:
-            fail_on_warnings = [FuncNodesDeprecationWarning]
-        if fail_on_warnings and not sys.warnoptions:
-            if not isinstance(fail_on_warnings, list):
-                try:
-                    fail_on_warnings = list(fail_on_warnings)
-                except Exception:
-                    fail_on_warnings = [fail_on_warnings]
-
-            for w in fail_on_warnings:
-                warnings.simplefilter("error", w, append=True)
-
-        fn = "funcnodes_test"
-        if add_pid:
-            fn += f"_{os.getpid()}"
-
-        _BASE_CONFIG_DIR = Path(tempfile.gettempdir()) / fn
-        if clear:
-            if _BASE_CONFIG_DIR.exists():
-                try:
-                    shutil.rmtree(_BASE_CONFIG_DIR)
-                except Exception:
-                    pass
-
-        if config:
-            write_config(_BASE_CONFIG_DIR / "config.json", config)
-
-        reload(_BASE_CONFIG_DIR)
-
-        update_config({"logging": {"handler": {"file": False}}})
-        update_config({"logging": {"level": "DEBUG"}})
-        # import here to avoid circular import
-        from ._logging import FUNCNODES_LOGGER, _update_logger, set_logging_dir  # noqa C0415 # pylint: disable=import-outside-toplevel
-
-        _update_logger(FUNCNODES_LOGGER)
-        set_logging_dir(os.path.join(_BASE_CONFIG_DIR, "logs"))
-    finally:
-        _CONFIG_CHANGED = True  # we change this to true, that the config is reloaded
+    pytest_set_in_test(
+        clear=clear, add_pid=add_pid, config=config, fail_on_warnings=fail_on_warnings
+    )
 
 
 CONFIG = path_module_attribute_to_getter(
@@ -409,14 +355,8 @@ BASE_CONFIG_DIR = path_module_attribute_to_getter(
     None,
 )
 
-# we need to decorate this later, as it would be called in BASE_CONFIG_DIR setter
-get_base_config_dir = method_deprecated_decorator()(get_base_config_dir)
-
-
 IN_NODE_TEST = path_module_attribute_to_getter(
-    __name__, "IN_NODE_TEST", get_in_test, set_in_test
+    __name__, "IN_NODE_TEST", get_in_test, set_in_test, intital_default=False
 )
 
-if bool(os.environ.get("IN_NODE_TEST", False)):
-    set_in_test()
 _CONFIG_CHANGED = True
