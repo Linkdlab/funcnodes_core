@@ -7,7 +7,12 @@ linking externally owned shelves via weak references.
 
 from __future__ import annotations
 from typing import List, Optional, TypedDict, Dict, Type, Tuple, Sequence, Union
-from funcnodes_core.node import Node, SerializedNodeClass, REGISTERED_NODES
+from funcnodes_core.node import (
+    Node,
+    SerializedNodeClass,
+    REGISTERED_NODES,
+    register_node,
+)
 from funcnodes_core.utils.serialization import JSONEncoder, Encdata
 from dataclasses import dataclass, field
 import weakref
@@ -310,6 +315,13 @@ class Library(EventEmitterMixin):
             if k[: len(path)] == path:
                 del self._records[k]
 
+    def _register_shelf_nodes(self, shelf: Shelf) -> None:
+        """Ensure all nodes reachable from ``shelf`` are registered."""
+        nodes, _ = flatten_shelf(shelf)
+        for node in nodes:
+            if node.node_id not in REGISTERED_NODES:
+                register_node(node)
+
     # -------- required public API --------
 
     @property
@@ -504,6 +516,7 @@ class Library(EventEmitterMixin):
         if path in self._external or path in self._records:
             raise ShelfExistsError(f"top-level shelf '{path[0]}' already exists")
 
+        self._register_shelf_nodes(shelf)
         self._external[path] = shelf
         return shelf
 
@@ -547,6 +560,7 @@ class Library(EventEmitterMixin):
                 f"child '{child_name}' already exists under {'/'.join(parent_t)}"
             )
 
+        self._register_shelf_nodes(shelf)
         self._external[path] = shelf
         return shelf
 

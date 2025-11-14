@@ -17,7 +17,7 @@ from funcnodes_core.lib import (
     module_to_shelf,
     serialize_shelf,
 )
-from funcnodes_core.node import Node
+from funcnodes_core.node import Node, REGISTERED_NODES
 from funcnodes_core.nodemaker import NodeDecorator
 from pytest_funcnodes import funcnodes_test
 
@@ -309,6 +309,45 @@ def test_library_external_shelf_mount_and_removal(make_node):
 
     lib.remove_shelf_path(["Root"])
     assert lib.shelves == []
+
+
+@funcnodes_test
+def test_add_external_shelf_registers_nodes():
+    lib = Library()
+    node_cls = _make_node_class(
+        "test_lib_external_register", "ExternalNode", "external_register_node"
+    )
+    external_top = Shelf(name="ExternalTop", nodes=[node_cls])
+
+    REGISTERED_NODES.pop(node_cls.node_id, None)
+    assert node_cls.node_id not in REGISTERED_NODES
+
+    try:
+        lib.add_external_shelf(external_top)
+        assert REGISTERED_NODES[node_cls.node_id] is node_cls
+    finally:
+        REGISTERED_NODES.pop(node_cls.node_id, None)
+
+
+@funcnodes_test
+def test_add_subshelf_weak_registers_nodes():
+    lib = Library()
+    parent = Shelf(name="Root")
+    lib.add_shelf(parent)
+
+    node_cls = _make_node_class(
+        "test_lib_subshelf_register", "ChildNode", "subshelf_register_node"
+    )
+    external_child = Shelf(name="ExternalChild", nodes=[node_cls])
+
+    REGISTERED_NODES.pop(node_cls.node_id, None)
+    assert node_cls.node_id not in REGISTERED_NODES
+
+    try:
+        lib.add_subshelf_weak(external_child, parent=["Root"], alias="Mounted")
+        assert REGISTERED_NODES[node_cls.node_id] is node_cls
+    finally:
+        REGISTERED_NODES.pop(node_cls.node_id, None)
 
 
 def test_add_external_shelf_rejects_list_mount():
