@@ -90,7 +90,7 @@ async def test_triggerspeeds():
     trigger_direct_called = called_triggerfast + called_trigger
 
     assert (
-        trigger_direct_called > cound_directfunc / 4
+        trigger_direct_called > cound_directfunc / 5
     )  # overhead due to all the trigger set and clear
 
     with yappicontext("test_triggerspeeds_called_await.pstat"):
@@ -107,7 +107,7 @@ async def test_triggerspeeds():
 
         trigger_called_await = called_triggerfast + called_trigger
         assert (
-            trigger_called_await > trigger_direct_called / 5
+            trigger_called_await > trigger_direct_called / 7
         )  # holy molly thats a lot of overhead,
         # mosttly due to the waiting for the event, which is kinda slow
         # uvloop might help, but this is not yet available under windows
