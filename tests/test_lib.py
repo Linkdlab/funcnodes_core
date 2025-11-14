@@ -8,12 +8,16 @@ from funcnodes_core.lib import (
     Library,
     Shelf,
     NodeClassNotFoundError,
+    ShelfExistsError,
+    ShelfNotFoundError,
+    ShelfPathError,
+    ShelfTypeError,
     check_shelf,
     flatten_shelf,
     module_to_shelf,
     serialize_shelf,
 )
-from funcnodes_core.node import Node
+from funcnodes_core.node import Node, REGISTERED_NODES
 from funcnodes_core.nodemaker import NodeDecorator
 from pytest_funcnodes import funcnodes_test
 
@@ -273,7 +277,7 @@ def test_library_external_shelf_mount_and_removal(make_node):
     root = Shelf(name="Root", nodes=[root_node])
     lib.add_shelf(root)
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ShelfExistsError):
         lib.add_external_shelf(Shelf(name="Root"))
 
     external_top_node = make_node("lib_external_top")
@@ -290,7 +294,7 @@ def test_library_external_shelf_mount_and_removal(make_node):
 
     assert lib.find_nodeid(child_node.node_id) == [["Root", "MountedChild"]]
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ShelfExistsError):
         lib.add_subshelf_weak(external_child, parent=["Root"], alias="MountedChild")
 
     snapshot = lib.full_serialize()
@@ -305,3 +309,72 @@ def test_library_external_shelf_mount_and_removal(make_node):
 
     lib.remove_shelf_path(["Root"])
     assert lib.shelves == []
+
+
+@funcnodes_test
+def test_add_external_shelf_registers_nodes():
+    lib = Library()
+    node_cls = _make_node_class(
+        "test_lib_external_register", "ExternalNode", "external_register_node"
+    )
+    external_top = Shelf(name="ExternalTop", nodes=[node_cls])
+
+    REGISTERED_NODES.pop(node_cls.node_id, None)
+    assert node_cls.node_id not in REGISTERED_NODES
+
+    try:
+        lib.add_external_shelf(external_top)
+        assert REGISTERED_NODES[node_cls.node_id] is node_cls
+    finally:
+        REGISTERED_NODES.pop(node_cls.node_id, None)
+
+
+@funcnodes_test
+def test_add_subshelf_weak_registers_nodes():
+    lib = Library()
+    parent = Shelf(name="Root")
+    lib.add_shelf(parent)
+
+    node_cls = _make_node_class(
+        "test_lib_subshelf_register", "ChildNode", "subshelf_register_node"
+    )
+    external_child = Shelf(name="ExternalChild", nodes=[node_cls])
+
+    REGISTERED_NODES.pop(node_cls.node_id, None)
+    assert node_cls.node_id not in REGISTERED_NODES
+
+    try:
+        lib.add_subshelf_weak(external_child, parent=["Root"], alias="Mounted")
+        assert REGISTERED_NODES[node_cls.node_id] is node_cls
+    finally:
+        REGISTERED_NODES.pop(node_cls.node_id, None)
+
+
+def test_add_external_shelf_rejects_list_mount():
+    lib = Library()
+    external_top = Shelf(name="ExternalTop")
+
+    with pytest.raises(ShelfPathError, match="single shelf name string"):
+        lib.add_external_shelf(external_top, mount=["ExternalTop"])
+
+
+def test_add_subshelf_weak_requires_existing_parent():
+    lib = Library()
+    external_child = Shelf(name="ExternalChild")
+
+    with pytest.raises(ShelfNotFoundError, match="parent path"):
+        lib.add_subshelf_weak(external_child, parent="Missing")
+
+
+def test_add_shelf_requires_shelf_instances():
+    lib = Library()
+
+    with pytest.raises(ShelfTypeError, match="Shelf"):
+        lib.add_shelf("not-a-shelf")  # type: ignore[arg-type]
+
+
+def test_remove_shelf_path_rejects_empty_path():
+    lib = Library()
+
+    with pytest.raises(ShelfPathError, match="must not be empty"):
+        lib.remove_shelf_path([])
