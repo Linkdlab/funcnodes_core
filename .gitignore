@@ -327,3 +327,4 @@ requirements.txt
 /src/*.egg-info
 /testouts
 .funcnodes/
+coverage.json

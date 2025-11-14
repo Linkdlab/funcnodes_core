@@ -180,9 +180,11 @@ def check_config_dir():
     global _CONFIG_DIR, _CONFIG_CHANGED
     _BASE_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     load_config(_BASE_CONFIG_DIR / "config.json")
-    if "custom_config_dir" in _CONFIG:
-        load_config(Path(_CONFIG["custom_config_dir"]) / "config.json")
-        _CONFIG_DIR = _CONFIG["custom_config_dir"]
+    custom_config_dir = _CONFIG.get("custom_config_dir")
+    if custom_config_dir:
+        custom_path = Path(custom_config_dir)
+        load_config(custom_path / "config.json")
+        _CONFIG_DIR = custom_path
     else:
         _CONFIG_DIR = _BASE_CONFIG_DIR
 
@@ -270,7 +272,7 @@ def update_render_options(options: RenderOptions):
         options["inputconverter"] = {}
     for k, v in list(options["inputconverter"].items()):
         if not isinstance(k, str):
-            del options["typemap"][k]
+            del options["inputconverter"][k]
             k = type_to_string(k)
             options["inputconverter"][k] = v
         if not isinstance(v, str):
@@ -281,7 +283,7 @@ def update_render_options(options: RenderOptions):
     # make sure its json serializable
     try:
         json.dumps(options)
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, TypeError):
         return
     deep_fill_dict(
         FUNCNODES_RENDER_OPTIONS, options, merge_lists=True, unify_lists=True

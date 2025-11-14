@@ -2,17 +2,22 @@ import json
 import os
 import tempfile
 from .serialization import JSONEncoder
+from pathlib import Path
+from typing import Union
 
 
-def write_json_secure(data, filepath, cls=None, **kwargs):
+def write_json_secure(data, filepath: Union[Path, str], cls=None, **kwargs):
     """
     Write JSON data to a file securely to avoid corruption.
 
     :param data: The data to write (dictionary or list).
     :param filepath: The final JSON file path.
     """
-    # Get the directory of the target file
-    directory = os.path.dirname(filepath)
+
+    filepath = Path(filepath).absolute()
+    directory = filepath.parent
+    directory.mkdir(parents=True, exist_ok=True)
+    filepath_str = str(filepath)
 
     cls = cls or JSONEncoder
 
@@ -32,4 +37,4 @@ def write_json_secure(data, filepath, cls=None, **kwargs):
             raise e
 
     # Atomically replace the target file with the temporary file
-    os.replace(temp_file_path, filepath)
+    os.replace(temp_file_path, filepath_str)

@@ -82,6 +82,7 @@ def assert_module_metadata(modulde_data: InstalledModule):
                 if dist is None:
                     raise exc
             _DIST = dist
+            return _DIST
 
         return _lazydist
 

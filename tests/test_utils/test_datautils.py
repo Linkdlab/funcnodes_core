@@ -1,5 +1,9 @@
 import unittest
-from funcnodes_core.utils.data import deep_fill_dict, deep_remove_dict_on_equal
+from funcnodes_core.utils.data import (
+    deep_fill_dict,
+    deep_remove_dict_on_equal,
+    deep_update_dict,
+)
 
 # Assuming the functions deep_fill_dict and deep_remove_dict_on_equal are defined as provided
 
@@ -87,6 +91,51 @@ class TestDictFunctions(unittest.TestCase):
         cleaned = deep_remove_dict_on_equal(filled, remove)
         expected_clean = {"a": [3, 4]}
         self.assertEqual(cleaned, expected_clean)
+
+    def test_deep_fill_merge_lists(self):
+        """Lists should be merged instead of overwritten when merge_lists is true."""
+        target = {"values": [1, 2]}
+        source = {"values": [3, 4]}
+
+        result = deep_fill_dict(target, source, merge_lists=True)
+
+        self.assertEqual(result["values"], [1, 2, 3, 4])
+        self.assertIs(result, target)
+
+    def test_deep_fill_merge_lists_unify(self):
+        """Unify option should de-duplicate entries after merging."""
+        target = {"values": [1, 2]}
+        source = {"values": [2, 3, 3]}
+
+        result = deep_fill_dict(
+            target, source, merge_lists=True, unify_lists=True, inplace=False
+        )
+
+        self.assertEqual(set(result["values"]), {1, 2, 3})
+        self.assertEqual(len(result["values"]), 3)
+        self.assertEqual(target, {"values": [1, 2]})
+
+    def test_deep_update_dict_merges_nested_and_keeps_original(self):
+        """deep_update_dict should overwrite values and respect inplace flag."""
+        target = {"a": {"keep": 1}, "level": 1}
+        source = {"a": {"add": 2}, "level": 2}
+
+        updated = deep_update_dict(target, source, inplace=False)
+
+        self.assertEqual(updated, {"a": {"keep": 1, "add": 2}, "level": 2})
+        # Ensure original target stays untouched when inplace is False
+        self.assertEqual(target, {"a": {"keep": 1}, "level": 1})
+
+    def test_deep_remove_dict_on_equal_not_inplace(self):
+        """Non-inplace removal should return a cleaned copy and keep target unchanged."""
+        target = {"a": 1, "nested": {"keep": 1, "drop": 0}}
+        remove = {"nested": {"drop": 0}}
+
+        cleaned = deep_remove_dict_on_equal(target, remove, inplace=False)
+
+        self.assertEqual(cleaned, {"a": 1, "nested": {"keep": 1}})
+        # original target retains the dropped key when inplace is False
+        self.assertEqual(target["nested"], {"keep": 1, "drop": 0})
 
 
 if __name__ == "__main__":

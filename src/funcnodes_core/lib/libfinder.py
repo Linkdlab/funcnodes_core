@@ -207,7 +207,8 @@ def find_shelf_from_path(
             # TODO: check this, is it really neeed anymore
             import tomllib
 
-            with open(tomlfile, "r") as f:
+            # tomllib expects a binary file handle
+            with open(tomlfile, "rb") as f:
                 content = tomllib.load(f)
             parsed = {}
             poetry_deps = (

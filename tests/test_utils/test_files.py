@@ -59,3 +59,15 @@ def test_write_json_secure_accepts_custom_encoder(tmp_path: Path):
     write_json_secure({"payload": Sample(7)}, target, cls=SampleEncoder, indent=0)
 
     assert _read_json(target) == {"payload": {"value": 7}}
+
+
+def test_write_json_secure_creates_parent_directories(tmp_path: Path):
+    target = tmp_path / "configs" / "deep" / "file.json"
+    payload = {"status": "ok"}
+
+    write_json_secure(payload, target)
+
+    assert target.exists()
+    assert _read_json(target) == payload
+    # ensure only the final file lives in the nested directory
+    assert list(target.parent.iterdir()) == [target]
