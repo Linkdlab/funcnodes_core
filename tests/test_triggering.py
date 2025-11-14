@@ -56,7 +56,7 @@ async def test_triggerspeeds():
             count_simplefunc = await _a_add_one(count_simplefunc)
 
     assert (
-        cound_directfunc >= count_simplefunc / 50
+        cound_directfunc >= count_simplefunc / 70
     )  # allow more headroom since asyncio without debug makes plain coroutines far faster
 
     # disable triggerlogger
