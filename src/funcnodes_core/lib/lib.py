@@ -1,3 +1,10 @@
+"""Shelf management utilities for the funcnodes node registry.
+
+The module stores shelves in a flat structure for efficiency while exposing a
+tree-based API. It also provides helpers for serializing the structure or
+linking externally owned shelves via weak references.
+"""
+
 from __future__ import annotations
 from typing import List, Optional, TypedDict, Dict, Type, Tuple, Sequence, Union
 from funcnodes_core.node import Node, SerializedNodeClass, REGISTERED_NODES
@@ -8,15 +15,37 @@ from ..eventmanager import EventEmitterMixin, emit_after
 
 
 class NodeClassNotFoundError(ValueError):
-    pass
+    """Raised when a requested node class cannot be found."""
 
 
-class ShelfError(Exception):
-    pass
+class ShelfError(ValueError):
+    """Base class for structured shelf errors."""
+
+
+class ShelfPathError(ShelfError):
+    """Raised when a shelf path is malformed or empty."""
+
+
+class ShelfExistsError(ShelfError):
+    """Raised when attempting to create a shelf that already exists."""
+
+
+class ShelfNotFoundError(ShelfError):
+    """Raised when a requested shelf path cannot be resolved."""
+
+
+class ShelfTypeError(ShelfError):
+    """Raised when an API receives an unexpected shelf type."""
+
+
+class ShelfNameError(ShelfError):
+    """Raised when shelf names or aliases are invalid."""
 
 
 @dataclass
 class Shelf:
+    """Tree node containing nodes and optional nested subshelves."""
+
     name: str
     description: str = ""
     nodes: List[Type[Node]] = field(default_factory=list)
@@ -107,22 +136,24 @@ class _ShelfRecord:
 
 
 def _norm_path(path_like: str | List[str]) -> Tuple[str, ...]:
+    """Return a tuple path from user input, rejecting empty elements."""
     if isinstance(path_like, str):
         if not path_like:
-            raise ValueError("shelf path must not be empty")
+            raise ShelfPathError("shelf path must not be empty")
         return (path_like,)
     if not path_like:
-        raise ValueError("shelf path must not be empty")
+        raise ShelfPathError("shelf path must not be empty")
     return tuple(path_like)
 
 
 def _unique_push(lst: List[str], value: str) -> None:
-    """Append only if value not present; preserves order."""
+    """Append ``value`` preserving order if it is not already present."""
     if value not in lst:
         lst.append(value)
 
 
 def serialize_shelf(shelf: Shelf) -> SerializedShelf:
+    """Return a JSON-ready representation of ``shelf``."""
     return {
         "nodes": [node.serialize_cls() for node in shelf.nodes],
         "subshelves": [serialize_shelf(sub) for sub in shelf.subshelves],
@@ -132,9 +163,13 @@ def serialize_shelf(shelf: Shelf) -> SerializedShelf:
 
 
 class Library(EventEmitterMixin):
-    """
-    Flat shelf store keyed by path tuples. Never stores Node classes; only IDs.
-    Reconstructs full `Shelf` trees on demand.
+    """Mutable registry of shelves backed by a flat dictionary.
+
+    The library stores the path of each internal shelf as a tuple whose value is
+    a ``_ShelfRecord`` containing only node IDs. Complete ``Shelf`` trees are
+    materialized on demand which keeps the long-lived structure friendly to the
+    garbage collector. External shelves can be mounted through weak references
+    so they automatically disappear once the owner drops the reference.
     """
 
     def __init__(self) -> None:
@@ -161,9 +196,9 @@ class Library(EventEmitterMixin):
     # -------- materialization helpers (private) --------
 
     def _ensure_path_exists(self, path: Tuple[str, ...]) -> None:
-        """Create missing _ShelfRecord entries along the path with empty descriptions."""
+        """Create placeholder records for each prefix of ``path`` if missing."""
         if not path:
-            raise ValueError("shelf path must not be empty")
+            raise ShelfPathError("shelf path must not be empty")
 
         # Walk from root to path, creating missing records with default description.
         for i in range(1, len(path) + 1):
@@ -174,7 +209,7 @@ class Library(EventEmitterMixin):
                 )
 
     def _child_names(self, parent: Tuple[str, ...]) -> List[str]:
-        """Return direct child names under `parent` (order not guaranteed)."""
+        """Return unique child names under ``parent`` (order not guaranteed)."""
         n = len(parent)
         names: List[str] = []
 
@@ -195,10 +230,10 @@ class Library(EventEmitterMixin):
         return names
 
     def _build_shelf(self, path: Tuple[str, ...]) -> Shelf:
-        """Reconstruct a Shelf (and its subtree) from flat records + weak externals."""
+        """Rehydrate a ``Shelf`` tree rooted at ``path``."""
         rec = self._records.get(path)
         if rec is None:
-            raise ValueError(f"shelf {'/'.join(path)} does not exist")
+            raise ShelfNotFoundError(f"shelf {'/'.join(path)} does not exist")
 
         # Resolve nodes lazily via REGISTERED_NODES; drop missing classes.
         nodes: List[Type[Node]] = []
@@ -269,7 +304,7 @@ class Library(EventEmitterMixin):
         """Remove the shelf at `path` and all its descendants."""
         exists = any(k[: len(path)] == path for k in self._records.keys())
         if not exists:
-            raise ValueError(f"shelf {'/'.join(path)} does not exist")
+            raise ShelfNotFoundError(f"shelf {'/'.join(path)} does not exist")
 
         for k in list(self._records.keys()):
             if k[: len(path)] == path:
@@ -292,7 +327,7 @@ class Library(EventEmitterMixin):
         Returns a materialized snapshot of the top-level shelf after merge.
         """
         if not isinstance(shelf, Shelf):
-            raise ValueError("shelf must be a Shelf")
+            raise ShelfTypeError("shelf must be a Shelf")
         self._add_shelf_tree(shelf, ())
         return self._build_shelf((shelf.name,))
 
@@ -307,7 +342,7 @@ class Library(EventEmitterMixin):
         if shelf is None:
             return  # shelf is already garbage-collected
         if not isinstance(shelf, Shelf):
-            raise ValueError("shelf must be a Shelf or a weak reference to a Shelf")
+            raise ShelfTypeError("shelf must be a Shelf or a weak reference to a Shelf")
         top = (shelf.name,)
         if top in self._records:
             self._remove_subtree(top)
@@ -318,7 +353,7 @@ class Library(EventEmitterMixin):
             except KeyError:
                 pass
             return
-        raise ValueError("Shelf does not exist")
+        raise ShelfNotFoundError("Shelf does not exist")
 
     @emit_after()
     def remove_shelf_path(self, path: List[str]):
@@ -350,8 +385,10 @@ class Library(EventEmitterMixin):
         shelf: str | List[str],
     ):
         """
-        Add (or upsert) nodes (by ID) under the given path.
-        Creates missing shelves with empty descriptions.
+        Register ``nodes`` under ``shelf`` creating shelves as needed.
+
+        Only the ``node_id`` is stored to keep the records compact; resolving the
+        actual class is deferred until materialization time.
         """
         path = _norm_path(shelf)
         self._ensure_path_exists(path)
@@ -367,6 +404,7 @@ class Library(EventEmitterMixin):
     # not in REGISTERED_NODES, it is treated as absent for these queries.
 
     def find_nodeid(self, nodeid: str, all: bool = True) -> List[List[str]]:
+        """Return shelf paths containing ``nodeid`` (restricted to registered nodes)."""
         if REGISTERED_NODES.get(nodeid) is None:
             return []
         hits: List[List[str]] = []
@@ -390,13 +428,16 @@ class Library(EventEmitterMixin):
         return len(self.find_nodeid(nodeid, all=False)) > 0
 
     def find_nodeclass(self, node: Type[Node], all: bool = True) -> List[List[str]]:
+        """Convenience wrapper returning shelves that currently expose ``node``."""
         return self.find_nodeid(node.node_id, all=all)
 
     @emit_after()
     def remove_nodeclass(self, node: Type[Node]):
         """
-        Remove a node (by ID) from the shelves where it is currently visible
-        (i.e., only from shelves where the node is registered).
+        Remove ``node`` references from all shelves where the ID is present.
+
+        Only shelves backed by internal records are mutated; weak shelves are
+        expected to update themselves when their owner changes.
         """
         paths = self.find_nodeclass(node)
         nodeid = node.node_id
@@ -414,8 +455,11 @@ class Library(EventEmitterMixin):
 
     def get_node_by_id(self, nodeid: str) -> Type[Node]:
         """
-        Return the Node class if it exists in at least one shelf and is registered.
-        Mirror previous semantics: not present anywhere => raise.
+        Return the registered ``Node`` class if it is visible in any shelf.
+
+        The lookup mirrors previous semantics: the node must both be registered
+        and referenced at least once; otherwise ``NodeClassNotFoundError`` is
+        raised to signal that the entry is no longer usable.
         """
         # Must appear in at least one shelf (as a currently registered node)
         if not self.has_node_id(nodeid):
@@ -430,12 +474,15 @@ class Library(EventEmitterMixin):
     def add_external_shelf(
         self,
         shelf: Union[Shelf, weakref.ref[Shelf]],
-        mount: str | List[str] | None = None,
+        mount: Optional[str] = None,
     ):
         """
-        Register an externally owned Shelf via weak reference.
-        It will appear in `shelves` and `full_serialize` while alive,
-        and disappear automatically once garbage-collected.
+        Register an externally owned shelf as a top-level entry.
+
+        The shelf is stored through a weak reference so it automatically
+        disappears when its owner releases it. ``mount`` may rename the shelf at
+        the root level but it must be a *single* shelf name; nested mounts are
+        intentionally rejected to avoid ambiguity with ``add_subshelf_weak``.
         """
 
         if isinstance(shelf, weakref.ref):
@@ -443,14 +490,19 @@ class Library(EventEmitterMixin):
         if shelf is None:
             return  # shelf is already garbage-collected
         if not isinstance(shelf, Shelf):
-            raise ValueError("shelf must be a Shelf or a weak reference to a Shelf")
+            raise ShelfTypeError("shelf must be a Shelf or a weak reference to a Shelf")
 
-        path = _norm_path(mount) if mount is not None else (shelf.name,)
-        if len(path) != 1:
-            raise ValueError("use add_subshelf_weak(...) to mount under a parent path")
+        name = mount if mount is not None else shelf.name
+        if not isinstance(name, str) or not name:
+            raise ShelfPathError(
+                "mount must be a single shelf name string; use add_subshelf_weak(...) "
+                "to mount under a parent path"
+            )
+
+        path = (name,)
 
         if path in self._external or path in self._records:
-            raise ValueError(f"top-level shelf '{path[0]}' already exists")
+            raise ShelfExistsError(f"top-level shelf '{path[0]}' already exists")
 
         self._external[path] = shelf
         return shelf
@@ -463,33 +515,35 @@ class Library(EventEmitterMixin):
         alias: Optional[str] = None,
     ):
         """
-        Mount an external Shelf weakly under an existing INTERNAL parent path.
+        Mount an external shelf underneath an existing *internal* shelf.
 
-        The child name will be `alias` if provided, else `shelf.name`.
-        The full mount path is `tuple(parent) + (child_name,)`.
+        The child name will be ``alias`` if provided, else ``shelf.name``.
+        The full mount path is ``tuple(parent) + (child_name,)``.
 
         Notes:
-        - Parent must exist as an internal shelf (in _records).
-        - The final path must not collide with an internal shelf or another weak shelf.
+        - ``parent`` must exist as an internal shelf (``_records`` entry)
+        - The final path must not collide with any internal or weak shelf
         """
         if isinstance(shelf, weakref.ref):
             shelf = shelf()
         if shelf is None:
             return  # shelf is already garbage-collected
         if not isinstance(shelf, Shelf):
-            raise ValueError("shelf must be a Shelf or a weak reference to a Shelf")
+            raise ShelfTypeError("shelf must be a Shelf or a weak reference to a Shelf")
 
         parent_t = _norm_path(parent)
         if parent_t not in self._records:
-            raise ValueError("parent path must refer to an existing internal shelf")
+            raise ShelfNotFoundError(
+                "parent path must refer to an existing internal shelf"
+            )
 
         child_name = alias if alias is not None else shelf.name
         if not child_name:
-            raise ValueError("alias/name must be non-empty")
+            raise ShelfNameError("alias/name must be non-empty")
 
         path = parent_t + (child_name,)
         if path in self._records or path in self._external:
-            raise ValueError(
+            raise ShelfExistsError(
                 f"child '{child_name}' already exists under {'/'.join(parent_t)}"
             )
 
@@ -498,7 +552,7 @@ class Library(EventEmitterMixin):
 
 
 def check_shelf(shelf: Shelf, parent_id: Optional[str] = None) -> Shelf:
-    # make shure required properties are present
+    """Normalize dict-based shelves and validate their contents."""
     if isinstance(shelf, dict):
         if "nodes" not in shelf:
             shelf["nodes"] = []
@@ -513,7 +567,7 @@ def check_shelf(shelf: Shelf, parent_id: Optional[str] = None) -> Shelf:
 
     for node in shelf.nodes:
         if not issubclass(node, Node):
-            raise ValueError(f"Node {node} is not a subclass of Node")
+            raise ShelfTypeError(f"Node {node} is not a subclass of Node")
 
     for subshelf in shelf.subshelves:
         subshelf.parent_shelf = shelf
@@ -535,6 +589,7 @@ def check_shelf(shelf: Shelf, parent_id: Optional[str] = None) -> Shelf:
 
 
 def flatten_shelves(shelves: List[Shelf]) -> Tuple[List[Type[Node]], List[Shelf]]:
+    """Flatten a list of shelves into parallel node and shelf lists."""
     nodes: List[Type[Node]] = []
     flat_shelves: List[Shelf] = []
     for shelf in shelves:
@@ -545,6 +600,7 @@ def flatten_shelves(shelves: List[Shelf]) -> Tuple[List[Type[Node]], List[Shelf]
 
 
 def flatten_shelf(shelf: Shelf) -> Tuple[List[Type[Node]], List[Shelf]]:
+    """Return a flattened view (nodes, shelves) for ``shelf`` and children."""
     nodes: List[Type[Node]] = list(shelf.nodes)
     shelves: List[Shelf] = [shelf]
     for subshelf in shelf.subshelves:
@@ -555,6 +611,7 @@ def flatten_shelf(shelf: Shelf) -> Tuple[List[Type[Node]], List[Shelf]]:
 
 
 def deep_find_node(shelf: Shelf, nodeid: str, all=True) -> List[List[str]]:
+    """Return all relative paths to ``nodeid`` inside ``shelf``."""
     paths: List[List[str]] = []
     try:
         get_node_in_shelf(shelf, nodeid)
@@ -576,9 +633,7 @@ def deep_find_node(shelf: Shelf, nodeid: str, all=True) -> List[List[str]]:
 
 
 def get_node_in_shelf(shelf: Shelf, nodeid: str) -> Tuple[int, Type[Node]]:
-    """
-    Returns the index and the node with the given id
-    """
+    """Return ``(index, node)`` for ``nodeid`` or raise ``NodeClassNotFoundError``."""
     for i, node in enumerate(shelf.nodes):
         if node.node_id == nodeid:
             return i, node
@@ -587,6 +642,7 @@ def get_node_in_shelf(shelf: Shelf, nodeid: str) -> Tuple[int, Type[Node]]:
 
 # --- JSON serialization ---
 def libencode(obj, preview=False):
+    """JSON-encoder hook that understands ``Library`` instances."""
     if isinstance(obj, Library):
         return Encdata(data=obj.full_serialize(), handeled=True, done=True)
     return Encdata(data=obj, handeled=False)
