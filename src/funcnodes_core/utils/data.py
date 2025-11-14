@@ -1,8 +1,6 @@
-from typing import Any, MutableMapping, Dict, TypeVar, Optional
+from typing import Any, MutableMapping, Dict, TypeVar
 from copy import deepcopy
-import warnings
 
-from .deprecations import SpellingDeprecationWarning
 
 T = TypeVar("T", bound=MutableMapping[Any, Any])
 
@@ -14,7 +12,6 @@ def deep_fill_dict(
     inplace: bool = True,
     merge_lists: bool = False,
     unify_lists: bool = False,
-    unfify_lists: Optional[bool] = None,
 ) -> T:
     """
     deep_fill_dict
@@ -38,13 +35,6 @@ def deep_fill_dict(
         The filled dict
     """
 
-    if unfify_lists is not None:
-        warnings.warn(
-            "unfify_lists is deprecated, use unify_lists instead.",
-            SpellingDeprecationWarning,
-        )
-        unify_lists = unfify_lists
-
     if not inplace:
         target_dict = deepcopy(target_dict)
 
@@ -62,17 +52,19 @@ def deep_fill_dict(
                     inplace=True,  # always inplace for nested dicts
                 )
                 continue
+        existing_value = target_dict.get(key)
+        can_merge_lists = (
+            merge_lists and isinstance(value, list) and isinstance(existing_value, list)
+        )
+
+        if can_merge_lists:
+            target_dict[key].extend(value)
+            if unify_lists:
+                target_dict[key] = list(set(target_dict[key]))
+            continue
+
         if overwrite_existing or (key not in target_dict):
-            if (
-                merge_lists
-                and isinstance(value, list)
-                and isinstance(target_dict.get(key), list)
-            ):
-                target_dict[key].extend(value)
-                if unify_lists:
-                    target_dict[key] = list(set(target_dict[key]))
-            else:
-                target_dict[key] = value
+            target_dict[key] = value
 
     return target_dict
 
@@ -111,7 +103,8 @@ def deep_remove_dict_on_equal(
         The cleaned dict
     """
     if not inplace:
-        target_dict = target_dict.copy()
+        target_dict = deepcopy(target_dict)
+        inplace = True
 
     for key, value in remove_dict.items():
         if key in target_dict:

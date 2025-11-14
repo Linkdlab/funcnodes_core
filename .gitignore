@@ -326,3 +326,5 @@ requirements.txt
 /.licensecheck
 /src/*.egg-info
 /testouts
+.funcnodes/
+coverage.json

@@ -1,9 +1,9 @@
 from __future__ import annotations
-from typing import List, Optional, TypedDict, Dict, Type, Tuple, Set, Sequence
+from typing import List, Optional, TypedDict, Dict, Type, Tuple, Sequence, Union
 from funcnodes_core.node import Node, SerializedNodeClass, REGISTERED_NODES
 from funcnodes_core.utils.serialization import JSONEncoder, Encdata
 from dataclasses import dataclass, field
-from weakref import WeakValueDictionary
+import weakref
 from ..eventmanager import EventEmitterMixin, emit_after
 
 
@@ -77,107 +77,6 @@ class Shelf:
 
         return True
 
-    def add_node(self, node: Type[Node]):
-        self.nodes.append(node)
-        # make nodes unique
-        self.nodes = list({id(node): node for node in self.nodes}.values())
-
-    def add_subshelf(self, shelf: Shelf):
-        shelf.parent_shelf = self
-        self.subshelves.append(shelf)
-        # make subshelves unique by object reference without changing the order
-        self.subshelves = list(
-            {id(subshelf): subshelf for subshelf in self.subshelves}.values()
-        )
-
-
-class ShelfReferenceLost(ReferenceError):
-    pass
-
-
-@dataclass
-class _InnerShelf:
-    nodes_ref: List[str]
-    inner_subshelves: List[_InnerShelf]
-    name: str
-    description: str
-    shelf_id: Optional[str] = None
-
-    @property
-    def nodes(self) -> List[Type[Node]]:
-        if self.shelf_id is not None:
-            return self.to_shelf().nodes
-        return [
-            node
-            for node in [REGISTERED_NODES.get(nodeid) for nodeid in self.nodes_ref]
-            if node is not None
-        ]
-
-    @property
-    def subshelves(self) -> List[Shelf]:
-        if self.shelf_id is not None:
-            return self.to_shelf().subshelves
-        return [subshelf.to_shelf() for subshelf in self.inner_subshelves]
-        #     return self.shelf().subshelves
-        # return [subshelf.to_shelf() for subshelf in self.inner_subshelves]
-
-    @classmethod
-    def from_shelf(cls, shelf: Shelf) -> _InnerShelf:
-        if not isinstance(shelf, Shelf):
-            raise ValueError("shelf must be of type Shelf")
-        check_shelf(shelf)
-        return cls(
-            nodes_ref=[node.node_id for node in shelf.nodes],
-            inner_subshelves=[
-                cls.from_shelf(subshelf) for subshelf in shelf.subshelves
-            ],
-            name=shelf.name,
-            description=shelf.description,
-            shelf_id=shelf.shelf_id,
-        )
-
-    def _check_shelf(self):
-        if self.shelf_id is not None:
-            if SHELFE_REGISTRY.get(self.shelf_id) is None:
-                raise ShelfReferenceLost(
-                    "Shelf reference is lost\n"
-                    "This could happen if the shelf is not permanently stored e.g. if its added to the library "
-                    "as a dictionary and the returned Shelf object is not referenced"
-                )
-
-    def to_shelf(self) -> Shelf:
-        self._check_shelf()
-        if self.shelf_id is not None:
-            return SHELFE_REGISTRY.get(self.shelf_id)
-        return Shelf(
-            nodes=self.nodes,
-            subshelves=self.subshelves,
-            name=self.name,
-            description=self.description,
-        )
-
-        # if self.shelf is not None:
-        #     return SHELFE_REGISTRY.get(self.shelf)()
-
-    def add_node(self, node: Type[Node]):
-        self.nodes_ref.append(node.node_id)
-
-    def add_subshelf(self, shelf: Shelf):
-        self._check_shelf()
-        self.inner_subshelves.append(_InnerShelf.from_shelf(shelf))
-
-    def update(self, shelf: Shelf):
-        for node in shelf.nodes:
-            if node not in self.nodes:
-                self.add_node(node)
-
-        subshelves = {subshelf.name: subshelf for subshelf in self.inner_subshelves}
-        for subshelf in shelf.subshelves:
-            if subshelf.name in subshelves:
-                subshelves[subshelf.name].update(subshelf)
-            else:
-                self.add_subshelf(subshelf)
-
 
 class SerializedShelf(TypedDict):
     nodes: List[SerializedNodeClass]
@@ -186,84 +85,416 @@ class SerializedShelf(TypedDict):
     description: str
 
 
-def serialize_shelfe(shelf: Shelf) -> SerializedShelf:
+class FullLibJSON(TypedDict):
     """
-    Serializes a shelf object into a dictionary.
+    FullLibJSON for a full serilization including temporary properties
     """
+
+    shelves: List[SerializedShelf]
+
+
+@dataclass
+class _ShelfRecord:
+    """
+    Flat, GC-friendly shelf record:
+      - NO strong references to Node classes; only node IDs are stored.
+      - Path is maintained externally as the dictionary key.
+    """
+
+    name: str
+    description: str = ""
+    nodes_ref: List[str] = field(default_factory=list)  # node IDs only
+
+
+def _norm_path(path_like: str | List[str]) -> Tuple[str, ...]:
+    if isinstance(path_like, str):
+        if not path_like:
+            raise ValueError("shelf path must not be empty")
+        return (path_like,)
+    if not path_like:
+        raise ValueError("shelf path must not be empty")
+    return tuple(path_like)
+
+
+def _unique_push(lst: List[str], value: str) -> None:
+    """Append only if value not present; preserves order."""
+    if value not in lst:
+        lst.append(value)
+
+
+def serialize_shelf(shelf: Shelf) -> SerializedShelf:
     return {
-        "nodes": [
-            node.serialize_cls() for node in shelf.nodes
-        ],  # unique nodes, necessary since somtimes nodes are added multiple times if they have aliases
-        "subshelves": [serialize_shelfe(shelf) for shelf in shelf.subshelves],
+        "nodes": [node.serialize_cls() for node in shelf.nodes],
+        "subshelves": [serialize_shelf(sub) for sub in shelf.subshelves],
         "name": shelf.name,
         "description": shelf.description,
     }
 
 
-def get_node_in_shelf(shelf: Shelf, nodeid: str) -> Tuple[int, Type[Node]]:
+class Library(EventEmitterMixin):
     """
-    Returns the index and the node with the given id
+    Flat shelf store keyed by path tuples. Never stores Node classes; only IDs.
+    Reconstructs full `Shelf` trees on demand.
     """
-    for i, node in enumerate(shelf.nodes):
-        if node.node_id == nodeid:
-            return i, node
-    raise NodeClassNotFoundError(f"Node with id {nodeid} not found")
 
+    def __init__(self) -> None:
+        # Flat store: key is a path tuple ("Top", "Child", ...)
+        self._records: Dict[Tuple[str, ...], _ShelfRecord] = {}
+        self._external: weakref.WeakValueDictionary[Tuple[str, ...], Shelf] = (
+            weakref.WeakValueDictionary()
+        )
+        super().__init__()
 
-def update_nodes_in_shelf(shelf: Shelf, nodes: Sequence[Type[Node]]):
-    """
-    Adds nodes to a shelf
-    """
-    for node in nodes:
-        try:
-            i, _ = get_node_in_shelf(shelf, node.node_id)
-            shelf.nodes[i] = node
-        except NodeClassNotFoundError:
-            shelf.add_node(node)
+    def _live_external_shelves(self) -> List[Shelf]:
+        """Return alive external shelves and prune dead refs."""
+        alive_refs: List[weakref.ref[Shelf]] = []
+        shelves: List[Shelf] = []
+        for r in self._external_shelf_refs:
+            s = r()
+            if s is not None:
+                shelves.append(s)
+                alive_refs.append(r)
+        if len(alive_refs) != len(self._external_shelf_refs):
+            self._external_shelf_refs = alive_refs
+        return shelves
 
+    # -------- materialization helpers (private) --------
 
-def deep_find_node(shelf: Shelf, nodeid: str, all=True) -> List[List[str]]:
-    paths = []
-    try:
-        i, node = get_node_in_shelf(shelf, nodeid)
-        paths.append([shelf.name])
-        if not all:
-            return paths
-    except ValueError:
-        pass
+    def _ensure_path_exists(self, path: Tuple[str, ...]) -> None:
+        """Create missing _ShelfRecord entries along the path with empty descriptions."""
+        if not path:
+            raise ValueError("shelf path must not be empty")
 
-    for subshelf in shelf.subshelves:
-        path = deep_find_node(subshelf, nodeid)
-        if len(path) > 0:
-            for p in path:
-                p.insert(0, shelf.name)
-            paths.extend(path)
-            if not all:
-                break
-    return paths
+        # Walk from root to path, creating missing records with default description.
+        for i in range(1, len(path) + 1):
+            key = path[:i]
+            if key not in self._records:
+                self._records[key] = _ShelfRecord(
+                    name=key[-1], description="", nodes_ref=[]
+                )
 
+    def _child_names(self, parent: Tuple[str, ...]) -> List[str]:
+        """Return direct child names under `parent` (order not guaranteed)."""
+        n = len(parent)
+        names: List[str] = []
 
-def flatten_shelf(shelf: Shelf) -> Tuple[List[Type[Node]], List[Shelf]]:
-    nodes: List[Type[Node]] = list(shelf.nodes)
-    shelves: List[Shelf] = [shelf]
-    for subshelf in shelf.subshelves:
-        subnodes, subshelves = flatten_shelf(subshelf)
-        nodes.extend(subnodes)
-        shelves.extend(subshelves)
-    return nodes, shelves
+        # internal children
+        for key in self._records.keys():
+            if len(key) == n + 1 and key[:n] == parent:
+                nm = key[-1]
+                if nm not in names:
+                    names.append(nm)
 
+        # external children
+        for key in list(self._external.keys()):
+            if len(key) == n + 1 and key[:n] == parent:
+                nm = key[-1]
+                if nm not in names:
+                    names.append(nm)
 
-def flatten_shelves(shelves: List[Shelf]) -> Tuple[List[Type[Node]], List[Shelf]]:
-    nodes: List[Type[Node]] = []
-    flat_shelves: List[Shelf] = []
-    for shelf in shelves:
-        subnodes, subshelves = flatten_shelf(shelf)
-        nodes.extend(subnodes)
-        flat_shelves.extend(subshelves)
-    return nodes, flat_shelves
+        return names
 
+    def _build_shelf(self, path: Tuple[str, ...]) -> Shelf:
+        """Reconstruct a Shelf (and its subtree) from flat records + weak externals."""
+        rec = self._records.get(path)
+        if rec is None:
+            raise ValueError(f"shelf {'/'.join(path)} does not exist")
 
-SHELFE_REGISTRY = WeakValueDictionary()
+        # Resolve nodes lazily via REGISTERED_NODES; drop missing classes.
+        nodes: List[Type[Node]] = []
+        for nid in rec.nodes_ref:
+            node_cls = REGISTERED_NODES.get(nid)
+            if node_cls is not None:
+                nodes.append(node_cls)
+
+        # Build children: internal (recursively) + external (weak)
+        subshelves: List[Shelf] = []
+        for child_name in self._child_names(path):
+            child_path = path + (child_name,)
+
+            # external child?
+            ext = self._external.get(child_path)
+            if ext is not None:
+                subshelves.append(
+                    ext
+                )  # do NOT set parent; avoid mutating external object
+                continue
+
+            # internal child (must exist if not external)
+            if child_path in self._records:
+                child = self._build_shelf(child_path)
+                # set parent only for internal children we constructed
+                child.parent_shelf = None  # avoid stale parent
+                subshelves.append(child)
+                continue
+
+            # Shouldn't happen (name came from union of internal/external)
+            # Skip silently to be defensive.
+
+        shelf = Shelf(
+            name=rec.name,
+            description=rec.description,
+            nodes=nodes,
+            subshelves=subshelves,
+        )
+        # Set parent for internal children only (those we created above)
+        for sub in shelf.subshelves:
+            if (path + (sub.name,)) not in self._external:
+                sub.parent_shelf = shelf
+        return shelf
+
+    def _top_paths(self) -> List[Tuple[str, ...]]:
+        """Top-level shelf paths (length == 1)."""
+        return [k for k in self._records.keys() if len(k) == 1]
+
+    def _add_shelf_tree(self, src: Shelf, parent: Tuple[str, ...] = ()) -> None:
+        """Merge/insert a Shelf tree into flat storage (node IDs only)."""
+        path = parent + (src.name,)
+        self._ensure_path_exists(path)
+        rec = self._records[path]
+
+        # Update description (latest wins)
+        if src.description != rec.description:
+            rec.description = src.description
+
+        # Merge node IDs (no duplicates)
+        for node_cls in src.nodes:
+            _unique_push(rec.nodes_ref, node_cls.node_id)
+
+        # Recurse
+        for sub in src.subshelves:
+            self._add_shelf_tree(sub, path)
+
+    def _remove_subtree(self, path: Tuple[str, ...]) -> None:
+        """Remove the shelf at `path` and all its descendants."""
+        exists = any(k[: len(path)] == path for k in self._records.keys())
+        if not exists:
+            raise ValueError(f"shelf {'/'.join(path)} does not exist")
+
+        for k in list(self._records.keys()):
+            if k[: len(path)] == path:
+                del self._records[k]
+
+    # -------- required public API --------
+
+    @property
+    def shelves(self) -> List[Shelf]:
+        # Rebuild complete trees for all top-level shelves (snapshots).
+        internal_shelves = [self._build_shelf(p) for p in self._top_paths()]
+        external_shelves = [s for (p, s) in list(self._external.items()) if len(p) == 1]
+        return internal_shelves + external_shelves
+
+    @emit_after()
+    def add_shelf(self, shelf: Shelf) -> Shelf:
+        """
+        Merge or insert a complete Shelf tree.
+        Top-level uniqueness is by name; children uniqueness is by (parent path, name).
+        Returns a materialized snapshot of the top-level shelf after merge.
+        """
+        if not isinstance(shelf, Shelf):
+            raise ValueError("shelf must be a Shelf")
+        self._add_shelf_tree(shelf, ())
+        return self._build_shelf((shelf.name,))
+
+    @emit_after()
+    def remove_shelf(self, shelf: Union[Shelf, weakref.ref[Shelf]]):
+        """
+        Remove a top-level shelf by name (and all its descendants).
+        Mirrors previous behavior where top-level shelves are keyed by name.
+        """
+        if isinstance(shelf, weakref.ref):
+            shelf = shelf()
+        if shelf is None:
+            return  # shelf is already garbage-collected
+        if not isinstance(shelf, Shelf):
+            raise ValueError("shelf must be a Shelf or a weak reference to a Shelf")
+        top = (shelf.name,)
+        if top in self._records:
+            self._remove_subtree(top)
+            return
+        if top in self._external:
+            try:
+                del self._external[top]
+            except KeyError:
+                pass
+            return
+        raise ValueError("Shelf does not exist")
+
+    @emit_after()
+    def remove_shelf_path(self, path: List[str]):
+        """Remove the shelf (and its subtree) at an explicit path."""
+        path_t = _norm_path(path)
+        # unmount weak shelf if present (works for top-level or nested)
+        if path_t in self._external:
+            try:
+                del self._external[path_t]
+            except KeyError:
+                pass
+            return
+        # otherwise remove internal subtree
+        self._remove_subtree(path_t)
+
+    def full_serialize(self) -> FullLibJSON:
+        """Serialize the entire library into a JSON-friendly structure."""
+        internals = [self._build_shelf(p) for p in self._top_paths()]
+        externals = [s for (p, s) in list(self._external.items()) if len(p) == 1]
+        return {"shelves": [serialize_shelf(s) for s in internals + externals]}
+
+    def _repr_json_(self) -> FullLibJSON:
+        return self.full_serialize()
+
+    @emit_after()
+    def add_nodes(
+        self,
+        nodes: Sequence[Type[Node]],
+        shelf: str | List[str],
+    ):
+        """
+        Add (or upsert) nodes (by ID) under the given path.
+        Creates missing shelves with empty descriptions.
+        """
+        path = _norm_path(shelf)
+        self._ensure_path_exists(path)
+        rec = self._records[path]
+        # Only store IDs; do not retain class references
+        for node_cls in nodes:
+            _unique_push(rec.nodes_ref, node_cls.node_id)
+
+    def add_node(self, node: Type[Node], shelf: str | List[str]):
+        self.add_nodes([node], shelf)
+
+    # Search APIs filter by CURRENTLY registered nodes: if a node ID is
+    # not in REGISTERED_NODES, it is treated as absent for these queries.
+
+    def find_nodeid(self, nodeid: str, all: bool = True) -> List[List[str]]:
+        if REGISTERED_NODES.get(nodeid) is None:
+            return []
+        hits: List[List[str]] = []
+        # internal
+        for key, rec in self._records.items():
+            if nodeid in rec.nodes_ref:
+                hits.append(list(key))
+                if not all:
+                    return hits
+        # all weak mounts
+        for path, shelf in list(self._external.items()):
+            subpaths = deep_find_node(shelf, nodeid, all=all)
+            for sp in subpaths:
+                # Replace the external shelf's own root with the mount alias (path[-1])
+                hits.append(list(path) + sp[1:])
+                if not all:
+                    return hits
+        return hits
+
+    def has_node_id(self, nodeid: str) -> bool:
+        return len(self.find_nodeid(nodeid, all=False)) > 0
+
+    def find_nodeclass(self, node: Type[Node], all: bool = True) -> List[List[str]]:
+        return self.find_nodeid(node.node_id, all=all)
+
+    @emit_after()
+    def remove_nodeclass(self, node: Type[Node]):
+        """
+        Remove a node (by ID) from the shelves where it is currently visible
+        (i.e., only from shelves where the node is registered).
+        """
+        paths = self.find_nodeclass(node)
+        nodeid = node.node_id
+        for path in paths:
+            key = tuple(path)
+            rec = self._records.get(key)
+            if rec is None:
+                continue
+            # Remove all occurrences of this ID in-place
+            rec.nodes_ref[:] = [nid for nid in rec.nodes_ref if nid != nodeid]
+
+    def remove_nodeclasses(self, nodes: Sequence[Type[Node]]):
+        for node in nodes:
+            self.remove_nodeclass(node)
+
+    def get_node_by_id(self, nodeid: str) -> Type[Node]:
+        """
+        Return the Node class if it exists in at least one shelf and is registered.
+        Mirror previous semantics: not present anywhere => raise.
+        """
+        # Must appear in at least one shelf (as a currently registered node)
+        if not self.has_node_id(nodeid):
+            raise NodeClassNotFoundError(f"Node with id '{nodeid}' not found")
+        node_cls = REGISTERED_NODES.get(nodeid)
+        if node_cls is None:
+            # Not registered anymore — treat as not found.
+            raise NodeClassNotFoundError(f"Node with id '{nodeid}' not found")
+        return node_cls
+
+    @emit_after()
+    def add_external_shelf(
+        self,
+        shelf: Union[Shelf, weakref.ref[Shelf]],
+        mount: str | List[str] | None = None,
+    ):
+        """
+        Register an externally owned Shelf via weak reference.
+        It will appear in `shelves` and `full_serialize` while alive,
+        and disappear automatically once garbage-collected.
+        """
+
+        if isinstance(shelf, weakref.ref):
+            shelf = shelf()
+        if shelf is None:
+            return  # shelf is already garbage-collected
+        if not isinstance(shelf, Shelf):
+            raise ValueError("shelf must be a Shelf or a weak reference to a Shelf")
+
+        path = _norm_path(mount) if mount is not None else (shelf.name,)
+        if len(path) != 1:
+            raise ValueError("use add_subshelf_weak(...) to mount under a parent path")
+
+        if path in self._external or path in self._records:
+            raise ValueError(f"top-level shelf '{path[0]}' already exists")
+
+        self._external[path] = shelf
+        return shelf
+
+    @emit_after()
+    def add_subshelf_weak(
+        self,
+        shelf: Union[Shelf, weakref.ref[Shelf]],
+        parent: str | List[str],
+        alias: Optional[str] = None,
+    ):
+        """
+        Mount an external Shelf weakly under an existing INTERNAL parent path.
+
+        The child name will be `alias` if provided, else `shelf.name`.
+        The full mount path is `tuple(parent) + (child_name,)`.
+
+        Notes:
+        - Parent must exist as an internal shelf (in _records).
+        - The final path must not collide with an internal shelf or another weak shelf.
+        """
+        if isinstance(shelf, weakref.ref):
+            shelf = shelf()
+        if shelf is None:
+            return  # shelf is already garbage-collected
+        if not isinstance(shelf, Shelf):
+            raise ValueError("shelf must be a Shelf or a weak reference to a Shelf")
+
+        parent_t = _norm_path(parent)
+        if parent_t not in self._records:
+            raise ValueError("parent path must refer to an existing internal shelf")
+
+        child_name = alias if alias is not None else shelf.name
+        if not child_name:
+            raise ValueError("alias/name must be non-empty")
+
+        path = parent_t + (child_name,)
+        if path in self._records or path in self._external:
+            raise ValueError(
+                f"child '{child_name}' already exists under {'/'.join(parent_t)}"
+            )
+
+        self._external[path] = shelf
+        return shelf
 
 
 def check_shelf(shelf: Shelf, parent_id: Optional[str] = None) -> Shelf:
@@ -297,186 +528,64 @@ def check_shelf(shelf: Shelf, parent_id: Optional[str] = None) -> Shelf:
         check_shelf(subshelf, parent_id=shelf.shelf_id) for subshelf in shelf.subshelves
     ]
 
-    # if shelf.shelf_id in SHELFE_REGISTRY and not ALLOW_SHELFE_OVERWRITE:
-    #     if shelf != SHELFE_REGISTRY[shelf.shelf_id]:
-    #         raise ValueError("Shelf with same id already exists")
-
-    SHELFE_REGISTRY[shelf.shelf_id] = shelf
-
     return shelf
 
 
-class Library(EventEmitterMixin):
-    def __init__(self) -> None:
-        self._shelves: List[_InnerShelf] = []
-        self._dependencies: Dict[str, Set[str]] = {
-            "modules": set(),
-        }
-        super().__init__()
-
-    @property
-    def shelves(self) -> List[Shelf]:
-        return [shelf.to_shelf() for shelf in self._shelves]
-
-    def add_dependency(self, module: str):
-        self._dependencies["modules"].add(module)
-
-    def get_dependencies(self) -> Dict[str, List[str]]:
-        return {k: list(v) for k, v in self._dependencies.items()}
-
-    @emit_after()
-    def add_shelf(self, shelf: Shelf):
-        shelf = check_shelf(shelf)
-        shelf_dict = {s.name: s for s in self._shelves}
-        if shelf.name in shelf_dict:
-            shelf_dict[shelf.name].update(shelf)
-            return shelf_dict[shelf.name].to_shelf()
-        else:
-            self._shelves.append(_InnerShelf.from_shelf(shelf))
-            return shelf
-
-    @emit_after()
-    def remove_shelf(self, shelf: Shelf):
-        for i, _shelf in enumerate(self._shelves):
-            if _shelf.to_shelf() == shelf:
-                self._shelves.pop(i)
-                return
-        raise ValueError("Shelf does not exist")
-
-    @emit_after()
-    def remove_shelf_path(self, path: List[str]):
-        subshelfes = self._shelves
-        current_shelf = None
-        for _shelf in path:
-            for i, subshelf in enumerate(subshelfes):
-                if subshelf.name == _shelf:
-                    parent_shelf = current_shelf
-                    current_shelf = subshelf
-                    break
-            if current_shelf is None:
-                raise ValueError(f"shelf {_shelf} does not exist")
-            subshelfes = current_shelf.inner_subshelves
-
-        if parent_shelf is None:
-            self._shelves.remove(current_shelf)
-        else:
-            parent_shelf.inner_subshelves.remove(current_shelf)
-
-    def _add_shelf_recursively(self, path: List[str]):
-        subshelfes = self._shelves
-        current_shelf = None
-        for _shelf in path:
-            if _shelf not in [subshelfes.name for subshelfes in subshelfes]:
-                current_shelf = _InnerShelf(
-                    nodes_ref=[], inner_subshelves=[], name=_shelf, description=""
-                )
-                subshelfes.append(current_shelf)
-            else:
-                for subshelf in subshelfes:
-                    if subshelf.name == _shelf:
-                        current_shelf = subshelf
-                        break
-            if current_shelf is None:
-                raise ValueError("shelf must not be empty")
-            subshelfes = current_shelf.inner_subshelves
-        if current_shelf is None:
-            raise ValueError("shelf must not be empty")
-        return current_shelf
-
-    def get_shelf(self, name: str) -> Shelf:
-        for shelf in self._shelves:
-            if shelf.name == name:
-                return shelf.to_shelf()
-        raise ValueError(f"Shelf with name {name} not found")
-
-    def full_serialize(self) -> FullLibJSON:
-        return {"shelves": [serialize_shelfe(shelf) for shelf in self.shelves]}
-
-    def _repr_json_(self) -> FullLibJSON:
-        return self.full_serialize()
-
-    @emit_after()
-    def add_nodes(
-        self,
-        nodes: Sequence[Type[Node]],
-        shelf: str | List[str],
-    ):
-        if isinstance(shelf, str):
-            shelf = [shelf]
-
-        if len(shelf) == 0:
-            raise ValueError("shelf must not be empty")
-
-        current_shelf = self._add_shelf_recursively(shelf)
-        update_nodes_in_shelf(current_shelf, nodes)
-
-    def add_node(self, node: Type[Node], shelf: str | List[str]):
-        self.add_nodes([node], shelf)
-
-    def get_shelf_from_path(self, path: List[str]) -> Shelf:
-        subshelfes = self._shelves
-        current_shelf = None
-        for _shelf in path:
-            new_subshelfes = None
-            for subshelf in subshelfes:
-                if subshelf.name == _shelf:
-                    new_subshelfes = subshelf.inner_subshelves
-                    current_shelf = subshelf
-                    break
-            if new_subshelfes is None:
-                raise ValueError(f"shelf {_shelf} does not exist")
-            subshelfes = new_subshelfes
-        if current_shelf is None:
-            raise ValueError("shelf must not be empty")
-        return current_shelf.to_shelf()
-
-    def find_nodeid(self, nodeid: str, all=True) -> List[List[str]]:
-        paths = []
-        for shelf in self.shelves:
-            path = deep_find_node(shelf, nodeid, all=all)
-            if len(path) > 0:
-                paths.extend(path)
-                if not all:
-                    break
-        return paths
-
-    def has_node_id(self, nodeid: str) -> bool:
-        return len(self.find_nodeid(nodeid, all=False)) > 0
-
-    def find_nodeclass(self, node: Type[Node], all=True) -> List[List[str]]:
-        return self.find_nodeid(node.node_id, all=all)
-
-    @emit_after()
-    def remove_nodeclass(self, node: Type[Node]):
-        paths = self.find_nodeclass(node)
-        for path in paths:
-            shelf = self.get_shelf_from_path(path)
-            i, _ = get_node_in_shelf(shelf, node.node_id)
-            shelf.nodes.pop(i)
-
-    def remove_nodeclasses(self, nodes: Sequence[Type[Node]]):
-        for node in nodes:
-            self.remove_nodeclass(node)
-
-    def get_node_by_id(self, nodeid: str) -> Type[Node]:
-        paths = self.find_nodeid(nodeid, all=False)
-
-        if len(paths) == 0:
-            raise NodeClassNotFoundError(f"Node with id '{nodeid}' not found")
-
-        shelf = self.get_shelf_from_path(paths[0])
-
-        return get_node_in_shelf(shelf, nodeid)[1]
+# --- helper functions ---
 
 
-class FullLibJSON(TypedDict):
+def flatten_shelves(shelves: List[Shelf]) -> Tuple[List[Type[Node]], List[Shelf]]:
+    nodes: List[Type[Node]] = []
+    flat_shelves: List[Shelf] = []
+    for shelf in shelves:
+        subnodes, subshelves = flatten_shelf(shelf)
+        nodes.extend(subnodes)
+        flat_shelves.extend(subshelves)
+    return nodes, flat_shelves
+
+
+def flatten_shelf(shelf: Shelf) -> Tuple[List[Type[Node]], List[Shelf]]:
+    nodes: List[Type[Node]] = list(shelf.nodes)
+    shelves: List[Shelf] = [shelf]
+    for subshelf in shelf.subshelves:
+        subnodes, subshelves = flatten_shelf(subshelf)
+        nodes.extend(subnodes)
+        shelves.extend(subshelves)
+    return nodes, shelves
+
+
+def deep_find_node(shelf: Shelf, nodeid: str, all=True) -> List[List[str]]:
+    paths: List[List[str]] = []
+    try:
+        get_node_in_shelf(shelf, nodeid)
+        paths.append([shelf.name])
+        if not all:
+            return paths
+    except NodeClassNotFoundError:
+        pass
+
+    for subshelf in shelf.subshelves:
+        subpaths = deep_find_node(subshelf, nodeid, all=all)
+        for p in subpaths:
+            p.insert(0, shelf.name)
+        if subpaths:
+            paths.extend(subpaths)
+            if not all:
+                return paths[:1]
+    return paths
+
+
+def get_node_in_shelf(shelf: Shelf, nodeid: str) -> Tuple[int, Type[Node]]:
     """
-    FullLibJSON for a full serilization including temporary properties
+    Returns the index and the node with the given id
     """
+    for i, node in enumerate(shelf.nodes):
+        if node.node_id == nodeid:
+            return i, node
+    raise NodeClassNotFoundError(f"Node with id {nodeid} not found")
 
-    shelves: List[SerializedShelf]
 
-
+# --- JSON serialization ---
 def libencode(obj, preview=False):
     if isinstance(obj, Library):
         return Encdata(data=obj.full_serialize(), handeled=True, done=True)

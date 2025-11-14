@@ -1,5 +1,9 @@
-import funcnodes_core as fn
 import asyncio
+
+import pytest
+
+import funcnodes_core as fn
+from funcnodes_core.utils.serialization import Encdata, JSONEncoder
 
 
 async def test_datapaths():
@@ -45,3 +49,64 @@ async def test_datapaths_done():
     assert node1.inputs["a"].datapath.done() is False
     await asyncio.sleep(1)
     assert node1.inputs["a"].datapath.done()
+
+
+@pytest.fixture(scope="module")
+def datapath_cls():
+    @fn.NodeDecorator(
+        "test_datapaths.helper",
+    )
+    def helper(a: int = 0) -> int:
+        return a
+
+    node = helper(name="helper-node")
+    return type(node.inputs["a"].datapath)
+
+
+class _DummyNode:
+    def __init__(self, name: str, *, in_trigger_soon: bool = False):
+        self.name = name
+        self.in_trigger_soon = in_trigger_soon
+
+
+def test_datapath_done_respects_breaking_nodes(datapath_cls):
+    node = _DummyNode("breaker", in_trigger_soon=True)
+    datapath = datapath_cls(node, "out")
+
+    assert datapath.done() is False
+    assert datapath.done(breaking_nodes=[node]) is True
+
+
+def test_datapath_done_handles_missing_node_reference(datapath_cls):
+    node = _DummyNode("ghost")
+    datapath = datapath_cls(node, "ghost-out")
+
+    datapath.node_ref = lambda: None  # simulate collected node
+
+    assert datapath.done() is True
+    assert str(datapath) == "Unknown Node(ghost-out)"
+
+
+def test_datapath_handler_encodes_source_graph(datapath_cls):
+    source = datapath_cls(_DummyNode("source"), "out")
+    target = datapath_cls(_DummyNode("target"), "in")
+    target.add_src_path(source)
+
+    handler_result = None
+    for encoder in JSONEncoder.encoder_registry[type(target)]:
+        result = encoder(target, preview=True)
+        if isinstance(result, Encdata):
+            candidate = result
+        else:
+            data, handled = result
+            candidate = Encdata(data=data, handeled=handled)
+        if candidate.handeled:
+            handler_result = candidate
+            break
+
+    assert handler_result is not None
+    assert handler_result.data == target.src_graph()
+    assert handler_result.done is False
+
+    encoded = JSONEncoder.apply_custom_encoding(target)
+    assert encoded == [[[[], [[]]]]]

@@ -30,6 +30,7 @@ def path_module_attribute_to_getter(
     true_setter: Optional[
         Callable[[Any], Any]
     ],  # Optional function to call when setting the attribute.
+    intital_default: Optional[T] = None,
 ) -> T:
     # Allow passing the module as a string (its name) or as the module object.
     if isinstance(module, str):
@@ -87,7 +88,10 @@ def path_module_attribute_to_getter(
     # goes through our property (which warns and delegates to the true getter/setter).
     module.__class__ = new_cls
 
-    return true_getter()
+    try:
+        return true_getter()
+    except Exception:
+        return intital_default
 
 
 def method_deprecated_decorator(alternative=None):

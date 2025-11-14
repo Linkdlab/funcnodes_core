@@ -61,6 +61,7 @@ from .utils.nodeutils import run_until_complete
 from .utils.nodetqdm import NodeTqdm, TqdmState, tqdm
 from funcnodes_core._logging import get_logger, FUNCNODES_LOGGER
 from .config import get_config
+from .utils.deprecations import method_deprecated_decorator
 
 if TYPE_CHECKING:
     from .nodespace import NodeSpace
@@ -365,6 +366,10 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             # check if it is present in the previous
             while ipser["id"] in cls._class_io_serialized:
                 io._uuid = io.uuid + "_"
+                if "____" in io.uuid:
+                    raise ValueError(
+                        f"IO with id {io.uuid} already exists in {cls} automatically generating a new one seems to fail"
+                    )
 
                 FUNCNODES_LOGGER.warning(
                     "IO with id %s already exists in %s. Changing id to %s",
@@ -1170,7 +1175,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             raise KeyError(f"No input or output named '{key}' found.")
 
     @classmethod
-    async def inti_call(
+    async def initialize_and_call(
         cls,
         /,
         node_init_kwargs: Optional[Dict[str, Any]] = None,
@@ -1196,6 +1201,11 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         if len(returns) == 1:
             return returns[0]
         return returns
+
+    @classmethod
+    @method_deprecated_decorator("initialize_and_call")
+    def inti_call(cls, *args, **kwargs):
+        return cls.initialize_and_call(*args, **kwargs)
 
 
 class NodeReadyState(TypedDict):

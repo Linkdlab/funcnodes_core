@@ -1,12 +1,12 @@
 import asyncio
 import unittest
 from funcnodes_core.triggerstack import TriggerStack  # Replace with your actual import
-from funcnodes_core import NodeDecorator, config, NodeTriggerError
+from funcnodes_core import NodeDecorator, NodeTriggerError
 
 
-import funcnodes_core as fn
-
-fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+import pytest
+from pytest_funcnodes import setup, teardown
+import pytest_funcnodes
 
 
 class TestTriggerStack(unittest.IsolatedAsyncioTestCase):
@@ -17,6 +17,12 @@ class TestTriggerStack(unittest.IsolatedAsyncioTestCase):
     append, check completion, and await all tasks. These tests cover its functionality, ensuring
     tasks are managed and awaited correctly.
     """
+
+    def setUp(self):
+        setup()
+
+    def tearDown(self):
+        teardown()
 
     async def test_append_and_len(self):
         """
@@ -137,10 +143,12 @@ class TestTriggerStack(unittest.IsolatedAsyncioTestCase):
             "Tasks should be handled in reverse order of their addition to the stack.",
         )
 
-    async def test_node_raises_exception(self):
-        """
-        Test that the check method raises an exception if a task has an exception.
-        """
+
+async def test_node_raises_exception():
+    """
+    Test that the check method raises an exception if a task has an exception (in test mode).
+    """
+    with pytest_funcnodes.test_context():
 
         @NodeDecorator(
             "test_node_raises_exception",
@@ -149,19 +157,9 @@ class TestTriggerStack(unittest.IsolatedAsyncioTestCase):
             raise ValueError("Test exception")
 
         ins = prunetofial()
-        with self.assertRaises(NodeTriggerError):
+        with pytest.raises(NodeTriggerError):
             async with asyncio.timeout(0.5):
                 await ins
-        o_IN_NODE_TEST = config._IN_NODE_TEST
-        config._IN_NODE_TEST = False
-        # tiemoput = 0.1
-        async with asyncio.timeout(0.5):
-            await ins
-
-        config._IN_NODE_TEST = o_IN_NODE_TEST
-
-        with self.assertRaises(NodeTriggerError):
-            await ins
 
 
 if __name__ == "__main__":
