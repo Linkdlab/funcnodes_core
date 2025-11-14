@@ -3,13 +3,19 @@ import unittest
 import funcnodes_core as fnc
 from importlib import reload
 
-import funcnodes_core as fn
 
-fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+from pytest_funcnodes import setup, teardown
+
 import funcnodes_basic  # noqa # pylint: disable=unused-import
 
 
 class TestSetup(unittest.TestCase):
+    def setUp(self):
+        setup()
+
+    def tearDown(self):
+        teardown()
+
     def test_setup(self):
         fnc.AVAILABLE_MODULES.clear()
         self.assertNotIn("funcnodes_basic", fnc.AVAILABLE_MODULES)
@@ -30,5 +36,3 @@ class TestSetup(unittest.TestCase):
         reload(module)
         reload(funcnodes_basic)
         reload(funcnodes_basic.lists)
-
-        print(list(fnc.lib.SHELFE_REGISTRY.keys()))

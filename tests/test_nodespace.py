@@ -2,49 +2,53 @@ import unittest
 from funcnodes_core import NodeSpace, Node, NodeInput, NodeOutput, Shelf
 import gc
 
-import funcnodes_core as fn
 import json
 
-fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
-
-
-class DummyNode(Node):
-    node_id = "ns_dummy_node"
-    node_name = "Dummy Node"
-    myinput = NodeInput(id="input", type=int, default=1)
-    myoutput = NodeOutput(id="output", type=int)
-
-    async def func(self, input: int) -> int:
-        return input
-
-
-class DummyNode2(Node):
-    node_id = "ns_dummy_node2"
-    node_name = "Dummy Node2"
-    myinput = NodeInput(id="input", type=int, default=1)
-    myoutput = NodeOutput(id="output", type=int)
-
-    async def func(self, input: int) -> int:
-        return input
+from pytest_funcnodes import setup, teardown
 
 
 class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        setup()
+
+        class DummyNode(Node):
+            node_id = "ns_dummy_node"
+            node_name = "Dummy Node"
+            myinput = NodeInput(id="input", type=int, default=1)
+            myoutput = NodeOutput(id="output", type=int)
+
+            async def func(self, input: int) -> int:
+                return input
+
+        class DummyNode2(Node):
+            node_id = "ns_dummy_node2"
+            node_name = "Dummy Node2"
+            myinput = NodeInput(id="input", type=int, default=1)
+            myoutput = NodeOutput(id="output", type=int)
+
+            async def func(self, input: int) -> int:
+                return input
+
+        self.DummyNode = DummyNode
+        self.DummyNode2 = DummyNode2
         self.nodespace = NodeSpace()
         self.nodespace.lib.add_node(DummyNode, "basic")
+
+    def tearDown(self):
+        teardown()
 
     def test_add_shelf(self):
         dummy_shelf = Shelf(
             name="test",
             description="test",
-            nodes=[DummyNode, DummyNode2],
+            nodes=[self.DummyNode, self.DummyNode2],
             subshelves=[],
         )
 
         self.nodespace.add_shelf(dummy_shelf)
         self.assertIn(dummy_shelf, self.nodespace.lib.shelves)
-        self.nodespace.add_node_instance(DummyNode2())
-        self.nodespace.add_node_instance(DummyNode())
+        self.nodespace.add_node_instance(self.DummyNode2())
+        self.nodespace.add_node_instance(self.DummyNode())
 
         self.nodespace.remove_shelf(dummy_shelf)
         self.assertNotIn(dummy_shelf, self.nodespace.lib.shelves)
@@ -52,7 +56,7 @@ class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.nodespace.nodes), 1)
 
     def test_add_node_instance(self):
-        node = DummyNode()
+        node = self.DummyNode()
         self.nodespace.add_node_instance(node)
         self.assertIn(node, self.nodespace.nodes)
 
@@ -69,13 +73,13 @@ class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(node_id, node.node_id)
 
     def test_serialize_nodes(self):
-        node = DummyNode()
+        node = self.DummyNode()
         self.nodespace.add_node_instance(node)
         serialized_nodes = self.nodespace.serialize_nodes()
         self.assertEqual(len(serialized_nodes), 1)
 
     def test_deserialize_nodes(self):
-        node = DummyNode()
+        node = self.DummyNode()
         self.nodespace.add_node_instance(node)
         self.assertEqual(len(self.nodespace.nodes), 1)
         serialized_nodes = self.nodespace.serialize_nodes()
@@ -84,7 +88,7 @@ class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.nodespace.nodes), 1)
 
     def test_serialize(self):
-        node = DummyNode()
+        node = self.DummyNode()
         self.nodespace.add_node_instance(node)
         serialized_nodespace = self.nodespace.serialize()
         self.assertIn("nodes", serialized_nodespace)
@@ -92,7 +96,7 @@ class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
         self.assertIn("prop", serialized_nodespace)
 
     def test_deserialize(self):
-        node = DummyNode()
+        node = self.DummyNode()
         self.nodespace.add_node_instance(node)
         serialized_nodespace = self.nodespace.serialize()
 
@@ -100,8 +104,8 @@ class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.nodespace.nodes), 1)
 
     def test_serialize_forward(self):
-        node1 = DummyNode()
-        node2 = DummyNode()
+        node1 = self.DummyNode()
+        node2 = self.DummyNode()
         node1["output"].connect(node2["input"])
         node2["input"].connect(node1["input"])
         self.nodespace.add_node_instance(node1)
@@ -112,9 +116,9 @@ class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(serialized_nodespace["edges"]), 2)
 
     def test_deserialize_forward(self):
-        node1 = DummyNode()
-        node2 = DummyNode()
-        node3 = DummyNode()
+        node1 = self.DummyNode()
+        node2 = self.DummyNode()
+        node3 = self.DummyNode()
         node1["output"].connect(node2["input"])
         node2["input"].connect(node3["input"])
         self.nodespace.add_node_instance(node1)
@@ -144,8 +148,8 @@ class TestNodeSpace(unittest.IsolatedAsyncioTestCase):
     def test_remove_node(self):
         gc.collect()
         # gc.set_debug(gc.DEBUG_LEAK)
-        node1 = DummyNode()
-        node2 = DummyNode()
+        node1 = self.DummyNode()
+        node2 = self.DummyNode()
 
         self.nodespace.add_node_instance(node1)
         self.nodespace.add_node_instance(node2)

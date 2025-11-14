@@ -1,7 +1,7 @@
 [project]
 name = "funcnodes-core"
 
-version = "1.0.6"
+version = "2.0.0a1"
 
 description = "core package for funcnodes"
 authors = [{name = "Julian Kimmig", email = "julian.kimmig@linkdlab.de"}]
@@ -23,6 +23,7 @@ dependencies = [
     "setuptools",
     "dill",
     "tqdm",
+    "pytest-funcnodes>=0.4.1",
 ]
 
 [project.license]
@@ -49,6 +50,8 @@ dev = [
     "yappi>=1.6.10",
     "pytest-timeout",
     "pytest-funcnodes>=0.1.0",
+    "pytest-asyncio",
+    "pytest-cov",
 ]
 
 [dependency-groups]

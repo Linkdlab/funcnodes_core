@@ -1,17 +1,17 @@
-import pytest
 import asyncio
-from funcnodes_core.utils.functions import (
-    make_run_in_new_thread,
-    make_run_in_new_process,
-    make_sync_if_needed,
-    make_async_if_needed,
-    call_sync,
-)
-import funcnodes_core as fn
 import time
 
+import pytest
 
-fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+import funcnodes_core as fn
+from funcnodes_core.utils.functions import (
+    call_sync,
+    make_async_if_needed,
+    make_run_in_new_process,
+    make_run_in_new_thread,
+    make_sync_if_needed,
+)
+from pytest_funcnodes import funcnodes_test
 
 
 def sync_function(x: int) -> int:
@@ -315,7 +315,7 @@ async def test_process_decorated_async_function():
     assert t2 >= 1
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_async_as_node():
     """Test an asynchronous function decorated with make_run_in_new_process."""
     node = fn.NodeDecorator(
@@ -336,7 +336,7 @@ async def test_async_as_node():
     assert node.func.__wrapped__.func == async_function
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_sync_as_node():
     """Test an asynchronous function decorated with make_run_in_new_process."""
     node = fn.NodeDecorator(
@@ -355,7 +355,7 @@ async def test_sync_as_node():
     assert node.func.__wrapped__.func == sync_function
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_async_as_node_thread():
     """Test an asynchronous function decorated with make_run_in_new_process."""
     node = fn.NodeDecorator(
@@ -376,7 +376,7 @@ async def test_async_as_node_thread():
     assert node.func.__wrapped__.func == async_function
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_sync_as_node_thread():
     """Test an asynchronous function decorated with make_run_in_new_process."""
     node = fn.NodeDecorator(
@@ -395,7 +395,7 @@ async def test_sync_as_node_thread():
     assert node.func.__wrapped__.func == sync_function
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_async_as_node_dec():
     """Test an asynchronous function decorated with make_run_in_new_process."""
 
@@ -421,7 +421,7 @@ async def test_async_as_node_dec():
     assert node.func.__wrapped__.__wrapped__.func == async_function
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_sync_as_node_dec():
     """Test an asynchronous function decorated with make_run_in_new_process."""
     node = fn.NodeDecorator(
@@ -440,7 +440,7 @@ async def test_sync_as_node_dec():
     assert node.func.__wrapped__.func == sync_function
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_async_as_node_thread_dec():
     """Test an asynchronous function decorated with make_run_in_new_process."""
     node = fn.NodeDecorator(
@@ -461,7 +461,7 @@ async def test_async_as_node_thread_dec():
     assert node.func.__wrapped__.func == async_function
 
 
-@pytest.mark.asyncio
+@funcnodes_test
 async def test_sync_as_node_thread_dec():
     """Test an asynchronous function decorated with make_run_in_new_process."""
     node = fn.NodeDecorator(

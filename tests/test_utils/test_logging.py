@@ -1,86 +1,93 @@
-import unittest
 import logging
 from io import StringIO
 
+import pytest
+
 from funcnodes_core import get_logger, set_log_format
-from funcnodes_core.testing import teardown, setup
+from pytest_funcnodes import funcnodes_test
 
 
-class TestNotTooLongStringFormatter(unittest.TestCase):
-    def setUp(self):
-        setup()
-        self.stream = StringIO()
-        self.handler = logging.StreamHandler(self.stream)
-        set_log_format(fmt=None, max_length=20)
-        self.logger = get_logger("TestLogger")
-        self.logger.setLevel(logging.DEBUG)
-        self.logger.addHandler(self.handler)
+@pytest.fixture
+def configured_logger():
+    from pytest_funcnodes import get_in_test
 
-    def tearDown(self):
-        teardown()
-        self.logger.removeHandler(self.handler)
-        self.stream.close()
+    assert get_in_test(), "Expected to be in test mode"
+    stream = StringIO()
+    handler = logging.StreamHandler(stream)
+    set_log_format(fmt=None, max_length=20)
+    logger = get_logger("TestLogger")
+    logger.setLevel(logging.DEBUG)
+    logger.addHandler(handler)
 
-    def test_truncate_long_message(self):
-        self.logger.info("This is a very long message that should be truncated.")
-        output = self.stream.getvalue().strip()
+    yield logger, stream
 
-        self.assertEqual(output, "This is a very lo...")
-
-    def test_no_truncate_short_message(self):
-        self.logger.info("Short message.")
-        output = self.stream.getvalue().strip()
-
-        self.assertEqual(output, "Short message.")
-
-    def test_no_truncate_exception(self):
-        try:
-            raise ValueError("An example exception with a lot of text.")
-        except ValueError:
-            self.logger.exception("Exception occurred")
-
-        output = self.stream.getvalue()
-
-        self.assertIn("Exception occurred", output)
-        self.assertIn("Traceback", output)
-        self.assertIn("ValueError: An example exception with a lot of text.", output)
+    logger.removeHandler(handler)
+    stream.close()
 
 
-class TestFuncnodesLogger(unittest.TestCase):
-    def setUp(self):
-        setup()
+@funcnodes_test
+def test_truncate_long_message(configured_logger):
+    logger, stream = configured_logger
 
-    def tearDown(self):
-        teardown()
+    logger.info("This is a very long message that should be truncated.")
+    output = stream.getvalue().strip()
 
-    def test_handler(self):
-        from funcnodes_core import FUNCNODES_LOGGER, config
+    assert output == "This is a very lo..."
 
-        handler_names = []
-        self.assertEqual(
-            len(FUNCNODES_LOGGER.handlers), 1, config.get_config().get("logging", {})
-        )
-        for handler in FUNCNODES_LOGGER.handlers:
-            handler_names.append(handler.name)
-        self.assertEqual(handler_names, ["console"])
 
-    def test_patch(self):
-        from funcnodes_core.config import get_config_dir, update_config, get_config
-        from tempfile import gettempdir
-        from funcnodes_core import FUNCNODES_LOGGER
-        from funcnodes_core._logging import _update_logger_handlers
+@funcnodes_test
+def test_no_truncate_short_message(configured_logger):
+    logger, stream = configured_logger
 
-        self.assertTrue(get_config_dir().is_relative_to(gettempdir()), get_config_dir())
+    logger.info("Short message.")
+    output = stream.getvalue().strip()
 
-        logger_config = get_config().get("logging", {})
+    assert output == "Short message."
 
+
+@funcnodes_test
+def test_no_truncate_exception(configured_logger):
+    logger, stream = configured_logger
+
+    try:
+        raise ValueError("An example exception with a lot of text.")
+    except ValueError:
+        logger.exception("Exception occurred")
+
+    output = stream.getvalue()
+
+    assert "Exception occurred" in output
+    assert "Traceback" in output
+    assert "ValueError: An example exception with a lot of text." in output
+
+
+@funcnodes_test
+def test_handler():
+    from funcnodes_core import FUNCNODES_LOGGER, config
+
+    handler_names = [handler.name for handler in FUNCNODES_LOGGER.handlers]
+
+    assert len(FUNCNODES_LOGGER.handlers) == 1, config.get_config().get("logging", {})
+    assert handler_names == ["console"]
+
+
+@funcnodes_test
+def test_patch():
+    from funcnodes_core.config import get_config_dir, update_config, get_config
+    from tempfile import gettempdir
+    from funcnodes_core import FUNCNODES_LOGGER
+    from funcnodes_core._logging import _update_logger_handlers
+
+    assert get_config_dir().is_relative_to(gettempdir()), get_config_dir()
+
+    logger_config = get_config().get("logging", {})
+
+    try:
         update_config({"logging": {"handler": {"console": False}}})
         _update_logger_handlers(FUNCNODES_LOGGER)
 
-        handler_names = []
-        for handler in FUNCNODES_LOGGER.handlers:
-            handler_names.append(handler.name)
-        self.assertEqual(handler_names, [])
-
+        handler_names = [handler.name for handler in FUNCNODES_LOGGER.handlers]
+        assert handler_names == []
+    finally:
         update_config({"logging": logger_config})
         _update_logger_handlers(FUNCNODES_LOGGER)

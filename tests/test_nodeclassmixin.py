@@ -3,10 +3,16 @@ import funcnodes_core as fn
 import gc
 
 
-fn.config.set_in_test(fail_on_warnings=[DeprecationWarning])
+from pytest_funcnodes import setup, teardown
 
 
 class TestNodeClassMixin(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        setup()
+
+    def tearDown(self):
+        teardown()
+
     async def test_nodeclassmixin_create_wo_id(self):
         with self.assertRaises(ValueError):
 
@@ -41,6 +47,16 @@ class TestNodeClassMixin(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(ins.get_all_nodes()), 1)
 
+        self.assertEqual(
+            len(testnode.inputs),
+            2,
+            f"inputs: {testnode.inputs}",  # _triggerinput and a
+        )
+        self.assertEqual(
+            len(testnode.outputs),
+            2,
+            f"outputs: {testnode.outputs}",  # out and _triggeroutput
+        )
         testnode.inputs["a"].value = 1
         await testnode
         self.assertEqual(testnode.outputs["out"].value, 1)
