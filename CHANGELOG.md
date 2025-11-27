@@ -1,3 +1,40 @@
+## v2.0.0 (2025-11-27)
+
+### BREAKING CHANGE
+
+- Node.inti_call() has been replaced by initialize_and_call();
+use the new name or rely on the deprecated wrapper.
+
+### Feat
+
+- **lib**: add descriptive shelf exceptions and docs
+- **lib**: add support for external shelves with weak references
+
+### Fix
+
+- **tests**: update assertion in test_in_node_test_varaset to check for prefix in BASE_CONFIG_DIR
+- **logging**: use deepcopy for handler configuration to prevent mutation
+- **lib**: register nodes for external shelves
+- **tests**: refine assertion thresholds in test_triggerspeeds for improved accuracy
+- **tests**: adjust assertion threshold in test_triggerspeeds for better accuracy
+- **utils**: improve error handling in write_json_secure function
+- **triggerstack**: import pytest_funcnodes conditionally to avoid circular imports
+- **core**: harden config and util behavior with regression tests
+- **config**: align deprecated test helpers with pytest and move testing to pytest-funcnodes
+- **node**: correct UUID uniqueness check for IO objects
+- **node**: improve UUID generation for IO objects to prevent duplicates
+- **config**: ensure config directory paths are absolute
+
+### Refactor
+
+- **config**: use deepcopy for DEFAULT_CONFIG to prevent mutation
+- **core**: adopt pytest-funcnodes and rename node init helper
+- **config, testing**: migrate configuration and testing setup to pytest
+- **tests**: migrate test cases from unittest to pytest with async support
+- **lib**: enhance external shelf management and child retrieval
+- **tests**: migrate TestTriggerSpeed from unittest to pytest
+- **lib**: flatten shelf store and rename serializer
+
 ## v1.0.5 (2025-09-16)
 
 ### Feat
