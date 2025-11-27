@@ -1,11 +1,12 @@
 import logging.config
 from typing import Optional
 import logging
-
+import copy
 
 from .utils.modules import resolve
 from .config import _CONFIG_DIR, get_config
 from pathlib import Path
+
 import os
 
 LOGGINGDIR = _CONFIG_DIR / "logs"
@@ -164,7 +165,7 @@ def _update_logger_handlers(
     # if prev_dir is None:
     #     prev_dir = LOGGINGDIR
     # prev_dir = Path(prev_dir)
-    handler_config = get_config().get("logging", {}).get("handler", {})
+    handler_config = copy.deepcopy(get_config().get("logging", {}).get("handler", {}))
     found = set()
     for hdlr in list(logger.handlers):
         # check if the handler is closed

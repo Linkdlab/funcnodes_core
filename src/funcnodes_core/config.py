@@ -2,6 +2,7 @@ from typing import Optional, TypedDict, List, Literal, Dict
 from pathlib import Path
 import os
 import json
+import copy
 from .utils.data import deep_fill_dict, deep_update_dict
 from .utils.plugins_types import RenderOptions
 from .utils.files import write_json_secure
@@ -86,8 +87,7 @@ DEFAULT_CONFIG: ConfigType = {
     },
 }
 
-
-_CONFIG = DEFAULT_CONFIG
+_CONFIG = copy.deepcopy(DEFAULT_CONFIG)
 _CONFIG_DIR = _BASE_CONFIG_DIR
 _CONFIG_CHANGED = None
 
@@ -160,7 +160,7 @@ def load_config(path: Path):
             pass
 
     if config is None:
-        config = DEFAULT_CONFIG
+        config = copy.deepcopy(DEFAULT_CONFIG)
 
     deep_fill_dict(config, DEFAULT_CONFIG, inplace=True)
     write_config(path, config)
@@ -300,7 +300,7 @@ def reload(funcnodes_config_dir: Optional[Path] = None):
     _BASE_CONFIG_DIR = Path(
         os.environ.get("FUNCNODES_CONFIG_DIR", Path.home() / ".funcnodes")
     ).absolute()
-    _CONFIG = DEFAULT_CONFIG
+    _CONFIG = copy.deepcopy(DEFAULT_CONFIG)
     _CONFIG_DIR = _BASE_CONFIG_DIR
     check_config_dir()
 
@@ -320,14 +320,24 @@ def set_in_test(
     in_test: Literal[True] = True,  # noqa: F841  # required for setter
     *,
     clear: bool = True,
-    add_pid: bool = True,
+    add_pid: bool = True,  # for backwards compatibility
+    no_prefix: bool = None,
     config: Optional[ConfigType] = None,
     fail_on_warnings: Optional[List[Warning]] = None,
 ):
     from pytest_funcnodes import set_in_test as pytest_set_in_test
 
+    if no_prefix is None:  # for backwards compatibility
+        if not add_pid:
+            no_prefix = True
+        else:
+            no_prefix = False
+
     pytest_set_in_test(
-        clear=clear, add_pid=add_pid, config=config, fail_on_warnings=fail_on_warnings
+        clear=clear,
+        no_prefix=no_prefix,
+        config=config,
+        fail_on_warnings=fail_on_warnings,
     )
 
 
