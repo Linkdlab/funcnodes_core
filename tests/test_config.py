@@ -19,7 +19,9 @@ def test_in_node_test_varaset():
 
         assert pytest_funcnodes.get_in_test()
         pid = os.getpid()
-        assert os.path.basename(fn.config._BASE_CONFIG_DIR) == f"funcnodes_test_{pid}"
+        assert os.path.basename(fn.config._BASE_CONFIG_DIR).startswith(
+            f"funcnodes_test_{pid}_"
+        )
     finally:
         teardown()
 
