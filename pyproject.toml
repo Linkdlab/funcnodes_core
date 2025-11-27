@@ -23,7 +23,7 @@ dependencies = [
     "setuptools",
     "dill",
     "tqdm",
-    "pytest-funcnodes>=1.0.0a1",
+    "pytest-funcnodes>=1.0.0",
 ]
 
 [project.license]
