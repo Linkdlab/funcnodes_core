@@ -1,3 +1,9 @@
+## v2.1.0 (2025-12-01)
+
+### Feat
+
+- **version**: add version retrieval from package metadata
+
 ## v2.0.0 (2025-11-27)
 
 ### BREAKING CHANGE
