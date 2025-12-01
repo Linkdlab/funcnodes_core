@@ -1,5 +1,3 @@
-__version__ = "2.0.0a3"
-
 from .io import (
     NodeInput,
     NodeOutput,
@@ -70,6 +68,13 @@ from exposedfunctionality import add_type, controlled_wrapper
 from ._setup import setup, AVAILABLE_MODULES
 
 from . import exceptions
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__ = version("funcnodes-core")
+except PackageNotFoundError:
+    # Package isn't installed (e.g. during local dev)
+    __version__ = "0.0.0"
 
 __all__ = [
     "NodeInput",
