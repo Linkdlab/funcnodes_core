@@ -71,6 +71,7 @@ def test_cache_meta_exception_handling():
     with pytest.raises(TypeError):
         set_cache_meta_for(cache_path, "hello world")
 
+    set_cache_meta_for(cache_path, {"hello": "world"})
     assert get_cache_meta_for(cache_path) == {"hello": "world"}
 
     # write a invalid meta file
