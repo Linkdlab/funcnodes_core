@@ -1,5 +1,6 @@
 import funcnodes_core as fn
 from pytest_funcnodes import funcnodes_test
+import pytest
 
 
 @funcnodes_test
@@ -59,7 +60,7 @@ def test_clear_cache_clears_cache():
 
 
 @funcnodes_test
-def test_chache_meta_exception_handling():
+def test_cache_meta_exception_handling():
     from funcnodes_core.utils.cache import (
         get_cache_path,
         get_cache_meta_for,
@@ -67,9 +68,10 @@ def test_chache_meta_exception_handling():
     )
 
     cache_path = get_cache_path("example.txt")
-    set_cache_meta_for(cache_path, "hello")
+    with pytest.raises(TypeError):
+        set_cache_meta_for(cache_path, "hello world")
 
-    assert get_cache_meta_for(cache_path) == "hello"
+    assert get_cache_meta_for(cache_path) == {"hello": "world"}
 
     # write a invalid meta file
     (cache_path.with_suffix(cache_path.suffix + ".meta.json")).write_text("invalid")

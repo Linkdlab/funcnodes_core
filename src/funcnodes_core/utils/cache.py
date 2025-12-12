@@ -46,6 +46,8 @@ def get_cache_meta_for(cache_path: Path) -> Optional[dict[str, Any]]:
 
 def set_cache_meta_for(cache_path: Path, meta: dict[str, Any]):
     """Write JSON metadata for a given cache file (atomic)."""
+    if not isinstance(meta, dict):
+        raise TypeError("meta must be a dictionary")
     meta_path = get_cache_meta_path_for(cache_path)
     write_json_secure(meta, meta_path, indent=2)
 
