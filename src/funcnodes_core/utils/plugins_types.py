@@ -32,9 +32,17 @@ class _LazyEntryDict(dict):
     def __getitem__(self, name: str) -> Any:
         value = super().__getitem__(name)
         if isinstance(value, EntryPoint):
-            print(f"loading entry point {value}")
             value = value.load()
             self[name] = value
+            if hasattr(self, "installed_module"):
+                installed_module = getattr(self, "installed_module")
+                if installed_module.module is None:
+                    if name == "module":
+                        installed_module.set_module(value)
+                    else:
+                        module = self.get("module", None)
+                        if module is not None:
+                            installed_module.set_module(module)
         return value
 
     def get(self, name: str, default: Any = None) -> Any:
@@ -66,6 +74,7 @@ class InstalledModule:
     def __post_init__(self):
         if not isinstance(self.entry_points, _LazyEntryDict):
             self.entry_points = _LazyEntryDict(self.entry_points)
+        self.entry_points.installed_module = self
 
     @property
     def rep_dict(self) -> dict[str, Any]:
@@ -83,3 +92,15 @@ class InstalledModule:
 
     def __str__(self) -> str:
         return self.__repr__()
+
+    def set_module(self, module: Any):
+        if self.module is not None:
+            if self.module != module:
+                raise ValueError(
+                    f"Module {self.name} already has a module {self.module} and cannot be set to {module}"
+                )
+        self.module = module
+        if not self._is_setup:
+            from .._setup import setup_module
+
+            setup_module(self)

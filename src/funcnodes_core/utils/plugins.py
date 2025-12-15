@@ -17,7 +17,6 @@ def reload_plugin_module(module_name: str):
     Returns:
       None
     """
-    print(f"reloading module {module_name}")
     if module_name in sys.modules:
         try:
             reload(sys.modules[module_name])
@@ -138,17 +137,9 @@ def get_installed_modules(
         # named_objects[module_name] = insmod
 
         # old code
-        print(f"loading module {module_name}")
         named_objects[module_name] = setup_plugin_module(module_name)
-        # named_objects[module_name] = reload_plugin_module(module_name)
         modulde_data = named_objects[module_name]
-
-        print(f"asserting entry points loaded for {module_name}")
-        # modulde_data = assert_entry_points_loaded(modulde_data)
-        print(f"asserting module metadata for {module_name}")
         modulde_data = assert_module_metadata(modulde_data)
-        print(f"module {module_name} loaded")
-
     return named_objects
 
 
