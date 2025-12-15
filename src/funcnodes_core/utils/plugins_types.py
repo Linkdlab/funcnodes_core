@@ -1,5 +1,6 @@
 from typing import Dict, Any, Optional, TypedDict, List
 from dataclasses import dataclass, field
+from importlib.metadata import EntryPoint
 
 
 class RenderOptions(TypedDict, total=False):
@@ -27,6 +28,21 @@ class BasePlugin(TypedDict):
     module: str
 
 
+class _LazyEntryDict(dict):
+    def __getitem__(self, name: str) -> Any:
+        value = super().__getitem__(name)
+        if isinstance(value, EntryPoint):
+            print(f"loading entry point {value}")
+            value = value.load()
+            self[name] = value
+        return value
+
+    def get(self, name: str, default: Any = None) -> Any:
+        if name not in self:
+            return default
+        return self[name]
+
+
 @dataclass
 class InstalledModule:
     """
@@ -40,11 +56,16 @@ class InstalledModule:
     name: str
     module: Any
     description: Optional[str] = None
-    entry_points: Dict[str, Any] = field(default_factory=dict)
+    entry_points: Dict[str, Any] = field(default_factory=_LazyEntryDict)
     plugins: List[BasePlugin] = field(default_factory=list)
     render_options: Optional[RenderOptions] = None
     version: Optional[str] = None
     _is_setup = False
+
+    # make sure that entrz points is a _LazyEntryDict
+    def __post_init__(self):
+        if not isinstance(self.entry_points, _LazyEntryDict):
+            self.entry_points = _LazyEntryDict(self.entry_points)
 
     @property
     def rep_dict(self) -> dict[str, Any]:

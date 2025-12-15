@@ -17,6 +17,7 @@ def reload_plugin_module(module_name: str):
     Returns:
       None
     """
+    print(f"reloading module {module_name}")
     if module_name in sys.modules:
         try:
             reload(sys.modules[module_name])
@@ -106,23 +107,47 @@ def assert_module_metadata(modulde_data: InstalledModule):
     return modulde_data
 
 
+def setup_plugin_module(module_name: str) -> Optional[InstalledModule]:
+    modulde_data = InstalledModule(
+        name=module_name,
+        entry_points={},
+        module=None,  # module not directly added since only modules with a module entry point are relevant
+    )
+
+    for ep in entry_points(group="funcnodes.module", module=modulde_data.name):
+        if ep.name in modulde_data.entry_points:
+            continue
+        modulde_data.entry_points[ep.name] = ep
+
+    return modulde_data
+
+
 def get_installed_modules(
     named_objects: Optional[Dict[str, InstalledModule]] = None,
 ) -> Dict[str, InstalledModule]:
     if named_objects is None:
         named_objects: Dict[str, InstalledModule] = {}
 
-    modules = set()
-
     for ep in entry_points(group="funcnodes.module"):
         module_name = ep.module
-        modules.add(module_name)
-    for module_name in modules:
-        if module_name not in named_objects:
-            named_objects[module_name] = reload_plugin_module(module_name)
+        if module_name in named_objects:
+            continue
+        # insmod = setup_plugin_module(module_name)
+        # if not insmod:
+        #     continue
+        # named_objects[module_name] = insmod
+
+        # old code
+        print(f"loading module {module_name}")
+        named_objects[module_name] = setup_plugin_module(module_name)
+        # named_objects[module_name] = reload_plugin_module(module_name)
         modulde_data = named_objects[module_name]
-        modulde_data = assert_entry_points_loaded(modulde_data)
+
+        print(f"asserting entry points loaded for {module_name}")
+        # modulde_data = assert_entry_points_loaded(modulde_data)
+        print(f"asserting module metadata for {module_name}")
         modulde_data = assert_module_metadata(modulde_data)
+        print(f"module {module_name} loaded")
 
     return named_objects
 
