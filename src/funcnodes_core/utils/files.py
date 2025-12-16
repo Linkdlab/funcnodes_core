@@ -22,6 +22,7 @@ def write_json_secure(data, filepath: Union[Path, str], cls=None, **kwargs):
     cls = cls or JSONEncoder
 
     # Create a temporary file in the same directory
+    temp_file_path = None
     try:
         with tempfile.NamedTemporaryFile(
             "w+", dir=directory, delete=False, encoding="utf-8"
@@ -33,8 +34,9 @@ def write_json_secure(data, filepath: Union[Path, str], cls=None, **kwargs):
             os.fsync(temp_file.fileno())  # Force writing to disk for durability
     except Exception as e:
         # Clean up the temporary file in case of an error
-        if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
+        if temp_file_path:
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
         raise e
 
     # Atomically replace the target file with the temporary file
