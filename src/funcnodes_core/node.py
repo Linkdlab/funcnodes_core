@@ -1100,8 +1100,15 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
 
     @savemethod
     async def wait_for_trigger_finish(self):
-        if self.in_trigger:
-            await self.asynceventmanager.wait("triggerdone")
+        while self.in_trigger:
+            try:
+                # The `triggerdone` event is a short pulse, so it can be missed.
+                # Use a bounded wait and re-check `in_trigger` to avoid deadlocks.
+                await asyncio.wait_for(
+                    self.asynceventmanager.wait("triggerdone"), timeout=0.5
+                )
+            except asyncio.TimeoutError:
+                continue
 
     @savemethod
     async def await_until_complete(self):
