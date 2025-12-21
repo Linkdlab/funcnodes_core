@@ -104,3 +104,6 @@ class InstalledModule:
             from .._setup import setup_module
 
             setup_module(self)
+
+    def _repr_json_(self) -> dict[str, Any]:
+        return self.rep_dict
