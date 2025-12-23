@@ -1,7 +1,7 @@
 [project]
 name = "funcnodes-core"
 
-version = "2.2.0"
+version = "2.3.0"
 
 description = "core package for funcnodes"
 authors = [{name = "Julian Kimmig", email = "julian.kimmig@linkdlab.de"}]

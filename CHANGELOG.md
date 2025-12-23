@@ -1,3 +1,21 @@
+## v2.3.0 (2025-12-23)
+
+### Feat
+
+- **node**: enhance trigger handling with asyncio task management
+- **tests**: add yappi profiling context manager and integrate into test cases
+- **plugins**: add JSON representation method to InstalledModule
+
+### Fix
+
+- **files**: ensure temporary file cleanup on error in write_json_secure
+
+### Refactor
+
+- **node, plugins**: improve event handling and entry point validation
+- **plugins**: enhance module handling and entry point loading
+- **setup**: improve error logging and simplify entry point handling
+
 ## v2.2.0 (2025-12-12)
 
 ### Feat

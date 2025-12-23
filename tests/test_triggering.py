@@ -1,39 +1,11 @@
 import time
-import os
-import pathlib
 
 import funcnodes_core as fn
 from pytest_funcnodes import funcnodes_test
 
-try:
-    import yappi
-except ImportError:
-    yappi = None
-
-
-class yappicontext:
-    def __init__(self, file):
-        base_dir = pathlib.Path(
-            os.environ.get("TEST_OUTPUT_DIR", "testouts")
-        ).absolute()
-        if not base_dir.exists():
-            base_dir.mkdir(parents=True, exist_ok=True)
-        self.file = str(base_dir / file)
-
-    def __enter__(self):
-        if yappi is not None:
-            yappi.set_clock_type("WALL")
-            yappi.start()
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if yappi is not None:
-            yappi.stop()
-            yappi.get_func_stats().save(self.file, "pstat")
-            yappi.clear_stats()
-
 
 @funcnodes_test
-async def test_triggerspeeds():
+async def test_triggerspeeds(yappicontext_class):
     @fn.NodeDecorator("TestTriggerSpeed test_triggerspeeds")
     async def _add_one(input: int) -> int:
         return input + 1  # a very simple and fast operation
@@ -43,13 +15,13 @@ async def test_triggerspeeds():
 
     node = _add_one(pretrigger_delay=0.0)
 
-    with yappicontext("test_triggerspeeds_directfunc.pstat"):
+    with yappicontext_class("test_triggerspeeds_directfunc.pstat"):
         t = time.perf_counter()
         cound_directfunc = 0
         while time.perf_counter() - t < 1:
             cound_directfunc = await node.func(cound_directfunc)
 
-    with yappicontext("test_triggerspeeds_simplefunc.pstat"):
+    with yappicontext_class("test_triggerspeeds_simplefunc.pstat"):
         t = time.perf_counter()
         count_simplefunc = 0
         while time.perf_counter() - t < 1:
@@ -78,7 +50,7 @@ async def test_triggerspeeds():
 
     node.on("triggerstart", increase_called_trigger)
     node.on("triggerfast", increase_called_triggerfast)
-    with yappicontext("test_triggerspeeds_direct_called.pstat"):
+    with yappicontext_class("test_triggerspeeds_direct_called.pstat"):
         while time.perf_counter() - t < 1:
             await node()
             node.inputs["input"].value = node.outputs["out"].value
@@ -93,7 +65,7 @@ async def test_triggerspeeds():
         trigger_direct_called > cound_directfunc / 5
     )  # overhead due to all the trigger set and clear
 
-    with yappicontext("test_triggerspeeds_called_await.pstat"):
+    with yappicontext_class("test_triggerspeeds_called_await.pstat"):
         node.inputs["input"].value = 1
 
         t = time.perf_counter()
