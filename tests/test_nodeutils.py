@@ -8,6 +8,7 @@ from funcnodes_core.utils.nodeutils import (
     run_until_complete,
 )
 from funcnodes_core.nodemaker import NodeDecorator
+from funcnodes_core.eventmanager import AsyncEventManager
 
 import funcnodes_core as fn
 
@@ -35,6 +36,26 @@ class TKNode(fn.Node):
 
     async def func(self, ip1, ip2):
         self.outputs["op1"].value += 1
+
+
+class SlowClearEventManager(AsyncEventManager):
+    def __init__(self, obj):
+        super().__init__(obj)
+        self.triggerdone_cleared = asyncio.Event()
+
+    async def set_and_clear(self, event: str, delta: float = 0) -> None:
+        await super().set_and_clear(event, delta=delta)
+        if event == "triggerdone":
+            self.triggerdone_cleared.set()
+            await asyncio.sleep(0.05)
+
+
+class SlowEventTKNode(TKNode):
+    node_id = "slow_event_tknode"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.asynceventmanager = SlowClearEventManager(self)
 
 
 @dataclass
@@ -181,3 +202,22 @@ async def test_trigger_fast():
     tw1 = te1 - ts1
     assert tw1 < 0.5
     assert node.outputs["op1"].value == 101
+
+
+@funcnodes_test
+async def test_wait_for_trigger_finish_avoids_triggerdone_race():
+    node = SlowEventTKNode()
+    node.pretrigger_delay = 0.0
+    node.inputs["ip1"].value = 1
+    node.inputs["ip2"].value = 2
+    node.request_trigger()
+
+    await node.asynceventmanager.triggerdone_cleared.wait()
+    assert node.in_trigger
+
+    ts = time.perf_counter()
+    await node.wait_for_trigger_finish()
+    tw = time.perf_counter() - ts
+
+    assert tw < 0.2
+    assert node.outputs["op1"].value == 1

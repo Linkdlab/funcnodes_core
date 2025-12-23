@@ -1,6 +1,11 @@
 from typing import Dict, Optional
 from collections.abc import Callable
-from importlib.metadata import entry_points, Distribution, PackageNotFoundError
+from importlib.metadata import (
+    EntryPoint,
+    entry_points,
+    Distribution,
+    PackageNotFoundError,
+)
 from importlib import reload
 import sys
 from .._logging import FUNCNODES_LOGGER
@@ -44,13 +49,15 @@ def reload_plugin_module(module_name: str):
 
 def assert_entry_points_loaded(modulde_data: InstalledModule):
     for ep in entry_points(group="funcnodes.module", module=modulde_data.name):
-        if ep.name in modulde_data.entry_points:
+        if ep.name in modulde_data.entry_points and not isinstance(
+            modulde_data.entry_points[ep.name], EntryPoint
+        ):
             continue
         try:
             loaded = ep.load()
             modulde_data.entry_points[ep.name] = loaded
             if ep.name == "module":
-                modulde_data.module = loaded
+                modulde_data.set_module(loaded)
         except Exception as exc:
             FUNCNODES_LOGGER.exception(f"Failed to load entry point {ep.name}: {exc}")
 
@@ -106,24 +113,45 @@ def assert_module_metadata(modulde_data: InstalledModule):
     return modulde_data
 
 
+def setup_plugin_module(module_name: str) -> Optional[InstalledModule]:
+    modulde_data = InstalledModule(
+        name=module_name,
+        entry_points={},
+        module=None,  # module not directly added since only modules with a module entry point are relevant
+    )
+
+    for ep in entry_points(group="funcnodes.module", module=modulde_data.name):
+        if ep.name in modulde_data.entry_points:
+            continue
+        modulde_data.entry_points[ep.name] = ep
+
+    return modulde_data
+
+
 def get_installed_modules(
     named_objects: Optional[Dict[str, InstalledModule]] = None,
 ) -> Dict[str, InstalledModule]:
     if named_objects is None:
         named_objects: Dict[str, InstalledModule] = {}
 
-    modules = set()
-
     for ep in entry_points(group="funcnodes.module"):
         module_name = ep.module
-        modules.add(module_name)
-    for module_name in modules:
-        if module_name not in named_objects:
-            named_objects[module_name] = reload_plugin_module(module_name)
-        modulde_data = named_objects[module_name]
-        modulde_data = assert_entry_points_loaded(modulde_data)
-        modulde_data = assert_module_metadata(modulde_data)
+        if module_name in named_objects:
+            continue
+        # insmod = setup_plugin_module(module_name)
+        # if not insmod:
+        #     continue
+        # named_objects[module_name] = insmod
 
+        # old code
+        if module_name in sys.modules:
+            named_objects[module_name] = reload_plugin_module(module_name)
+        else:
+            named_objects[module_name] = setup_plugin_module(module_name)
+        modulde_data = named_objects[module_name]
+
+    for module_name, modulde_data in named_objects.items():
+        modulde_data = assert_module_metadata(modulde_data)
     return named_objects
 
 

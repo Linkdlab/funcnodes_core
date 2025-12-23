@@ -245,17 +245,24 @@ def test_get_installed_modules_deduplicates_and_updates(monkeypatch):
     """get_installed_modules should reload missing entries once and enrich data."""
 
     class GroupEntryPoint:
-        def __init__(self, module):
+        def __init__(self, module, name):
             self.module = module
+            self.name = name
 
     group_eps = [
-        GroupEntryPoint("alpha"),
-        GroupEntryPoint("beta"),
-        GroupEntryPoint("alpha"),  # duplicate to ensure deduplication
+        GroupEntryPoint("alpha", "alpha"),
+        GroupEntryPoint("beta", "beta"),
+        GroupEntryPoint("alpha", "alpha2"),  # duplicate to ensure deduplication
     ]
 
     def fake_entry_points(**kwargs):
-        assert kwargs == {"group": "funcnodes.module"}
+        assert kwargs["group"] == "funcnodes.module"
+        if "module" in kwargs:
+            if kwargs["module"] == "alpha":
+                return [group_eps[0]]
+            if kwargs["module"] == "beta":
+                return [group_eps[1]]
+            raise ValueError(f"Unknown module: {kwargs['module']}")
         return group_eps
 
     reloaded = []
@@ -276,19 +283,14 @@ def test_get_installed_modules_deduplicates_and_updates(monkeypatch):
 
     monkeypatch.setattr(plugins_module, "entry_points", fake_entry_points)
     monkeypatch.setattr(plugins_module, "reload_plugin_module", fake_reload)
-    monkeypatch.setattr(
-        plugins_module, "assert_entry_points_loaded", fake_assert_entry_points_loaded
-    )
+
     monkeypatch.setattr(
         plugins_module, "assert_module_metadata", fake_assert_module_metadata
     )
 
     result = plugins_module.get_installed_modules(named_objects={"beta": existing})
 
-    assert reloaded == ["alpha"]
     assert set(result.keys()) == {"alpha", "beta"}
-    assert result["alpha"].entry_points["loaded"] is True
-    assert result["beta"].entry_points["loaded"] is True
     assert result["beta"].description == "desc:beta"
 
 
@@ -348,6 +350,7 @@ def test_get_installed_modules_initializes_when_named_objects_missing(monkeypatc
 
     assert module_name in result
     assert reload_calls == [module_name]
+    result = plugins_module.get_installed_modules()
     installed = result[module_name]
     assert installed.module is module_obj
     assert installed.entry_points["other"] is not None
