@@ -1,3 +1,9 @@
+## v2.3.1 (2025-12-23)
+
+### Fix
+
+- **core**: handle duplicate IO ids and output mapping
+
 ## v2.3.0 (2025-12-23)
 
 ### Feat
