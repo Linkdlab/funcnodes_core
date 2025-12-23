@@ -377,7 +377,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
                     cls,
                     io.uuid,
                 )
-                ipser = ip.to_dict()
+                ipser = io.serialize()
 
             cls._class_io_serialized[ipser["id"]] = ipser
 

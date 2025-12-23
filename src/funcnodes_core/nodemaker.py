@@ -107,9 +107,9 @@ def node_class_maker(
         outs = await asyncfunc(*args, **kwargs)
         if len(outputs) > 1:
             for op, out in zip(outputs, outs):
-                self.outputs[op.name].value = out
+                self.outputs[op.uuid].value = out
         elif len(outputs) == 1:
-            self.outputs[outputs[0].name].value = outs
+            self.outputs[outputs[0].uuid].value = outs
         return outs
 
     kwargs.setdefault("node_name", in_func.ef_funcmeta.get("name", id))
