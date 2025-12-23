@@ -4,6 +4,7 @@ from typing import Annotated, Tuple
 
 
 import funcnodes_core as fn
+import pytest
 from pytest_funcnodes import funcnodes_test
 
 
@@ -600,3 +601,63 @@ async def test_decorator_with_annotated_type_and_on():
     await fn.run_until_complete(ins1, ins2)
     assert ins1.outputs["c"].value == 1
     assert ins2.outputs["c"].value == 3
+
+
+@funcnodes_test
+async def test_decorator_withdouble_params():
+    @fn.NodeDecorator(node_id="my_nodea", outputs=[{"name": "a"}])
+    def my_nodea(a: int, b: int) -> int:
+        return a + b
+
+    node = my_nodea()
+    input_a = node.inputs["a"]
+    output_a = next(op for op in node.outputs.values() if op.name == "a")
+
+    assert input_a.name == "a"
+    assert output_a.name == "a"
+    assert output_a.uuid != input_a.uuid
+    assert output_a.uuid == "a_"
+    assert output_a.uuid in my_nodea._class_io_serialized
+
+    node.inputs["a"].value = 1
+    node.inputs["b"].value = 2
+    await node
+
+    assert node.outputs[output_a.uuid].value == 3
+
+    class MultiOutputNode(fn.Node):
+        node_id = "my_nodea_multi"
+
+        a = fn.NodeInput(id="a", type=int)
+        b = fn.NodeInput(id="b", type=int)
+        out_a1 = fn.NodeOutput(id="a", type=int)
+        out_a2 = fn.NodeOutput(id="a", type=int)
+        out_a3 = fn.NodeOutput(id="a", type=int)
+
+        async def func(self, a: int, b: int) -> int:  # noqa: A003 - signature
+            return a + b
+
+    node_multi = MultiOutputNode()
+    output_uuids = sorted(
+        op.uuid for op in node_multi.outputs.values() if op.name == "a"
+    )
+    assert output_uuids == ["a_", "a__", "a___"]
+    for uuid in output_uuids:
+        assert uuid in MultiOutputNode._class_io_serialized
+
+    with pytest.raises(
+        ValueError, match="automatically generating a new one seems to fail"
+    ):
+
+        class MultiOutputNodeFail(fn.Node):
+            node_id = "my_nodea_multi_fail"
+
+            a = fn.NodeInput(id="a", type=int)
+            b = fn.NodeInput(id="b", type=int)
+            out_a1 = fn.NodeOutput(id="a", type=int)
+            out_a2 = fn.NodeOutput(id="a", type=int)
+            out_a3 = fn.NodeOutput(id="a", type=int)
+            out_a4 = fn.NodeOutput(id="a", type=int)
+
+            async def func(self, a: int, b: int) -> int:  # noqa: A003 - signature
+                return a + b
