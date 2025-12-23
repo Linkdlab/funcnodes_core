@@ -400,6 +400,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         self._outputs: List[NodeOutput] = []
         self._outputs_dict: Optional[Dict[str, NodeOutput]] = None
         self._triggerstack: Optional[TriggerStack] = None
+        self._trigger_task: Optional[asyncio.Task] = None
         # flag whether the trigger has started but still not read the ios
         self._trigger_open = False
         self._requests_trigger = False
@@ -724,6 +725,8 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         checked if the triggerstack is not None and if it is done
         or if the _trigger_open flag is set
         """
+        if self._trigger_task is not None and self._trigger_task.done():
+            self._trigger_task = None
         if self._triggerstack is not None:
             if self._triggerstack.done():
                 self._triggerstack = None
@@ -1101,14 +1104,25 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
     @savemethod
     async def wait_for_trigger_finish(self):
         while self.in_trigger:
-            try:
-                # The `triggerdone` event is a short pulse, so it can be missed.
-                # Use a bounded wait and re-check `in_trigger` to avoid deadlocks.
-                await asyncio.wait_for(
-                    self.asynceventmanager.wait("triggerdone"), timeout=0.5
-                )
-            except asyncio.TimeoutError:
-                continue
+            task = self._trigger_task
+            if task is not None:
+                try:
+                    # Wait on the trigger task directly to avoid missing event pulses.
+                    await asyncio.wait_for(asyncio.shield(task), timeout=0.5)
+                except asyncio.TimeoutError:
+                    continue
+            else:
+                try:
+                    # Fallback when no task reference is available.
+                    await asyncio.wait_for(
+                        self.asynceventmanager.wait("triggerdone"), timeout=0.5
+                    )
+                except asyncio.TimeoutError:
+                    continue
+
+    def _clear_trigger_task(self, task: asyncio.Task) -> None:
+        if self._trigger_task is task:
+            self._trigger_task = None
 
     @savemethod
     async def await_until_complete(self):
@@ -1152,7 +1166,10 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
         triggerlogger.debug("triggering %s", self)
         self._trigger_open = True
         self._triggerstack = triggerstack
-        self._triggerstack.append(asyncio.create_task(self()))
+        task = asyncio.create_task(self())
+        self._trigger_task = task
+        task.add_done_callback(self._clear_trigger_task)
+        self._triggerstack.append(task)
         self._requests_trigger = False
         return self._triggerstack
 
