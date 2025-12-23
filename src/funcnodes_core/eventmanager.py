@@ -337,11 +337,11 @@ class EventEmitterMixin:
         msg["src"] = self
         listened = False
         if event_name in self._events:
-            for callback in self._events[event_name]:
+            for callback in self._events[event_name][:]:
                 callback(**msg)
                 listened = True
         if "*" in self._events:
-            for callback in self._events["*"]:
+            for callback in self._events["*"][:]:
                 callback(event=event_name, **msg)
                 listened = True
 
