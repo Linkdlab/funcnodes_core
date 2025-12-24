@@ -1,3 +1,9 @@
+## v2.3.2 (2025-12-24)
+
+### Fix
+
+- **eventmanager**: prevent skipping listeners during event emission
+
 ## v2.3.1 (2025-12-23)
 
 ### Fix
