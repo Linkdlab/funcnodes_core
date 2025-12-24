@@ -336,8 +336,8 @@ class EventEmitterMixin:
             raise ValueError("src is a reserved keyword")
         msg["src"] = self
         listened = False
-        if event_name in self._events[:]:
-            for callback in self._events[event_name]:
+        if event_name in self._events:
+            for callback in self._events[event_name][:]:
                 callback(**msg)
                 listened = True
         if "*" in self._events:
