@@ -42,7 +42,7 @@ def test_no_deprecation_warning():
         warnings.simplefilter("error", DeprecationWarning)
 
 
-def test_config_not_laoded():
+def test_config_not_loaded():
     try:
         assert not fn.config._CONFIG_CHANGED, "Expected _CONFIG_CHANGED to be False"
 
