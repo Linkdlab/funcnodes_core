@@ -37,6 +37,25 @@ class DummyNode(Node):
         return input
 
 
+def make_counter_node(node_id: str, *, does_trigger: bool = True):
+    resolved_node_id = node_id
+
+    class CounterNode(Node):
+        node_id = resolved_node_id
+        value = NodeInput(id="value", type=int, does_trigger=does_trigger)
+        output = NodeOutput(id="output", type=int)
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, pretrigger_delay=0.0, **kwargs)
+            self.call_count = 0
+
+        async def func(self, value: int):
+            self.call_count += 1
+            self.outputs["output"].value = value
+
+    return CounterNode
+
+
 @funcnodes_test
 async def test_nodeclass_initialization():
     with pytest.raises(TypeError):
@@ -126,6 +145,161 @@ async def test_trigger_stack():
     new_trigger_stack = test_node.trigger(triggerstack=trigger_stack)
     assert trigger_stack is new_trigger_stack
     assert not trigger_stack.done()
+
+
+@funcnodes_test
+async def test_forwarded_input_respects_target_does_trigger_flag():
+    ForwardSourceNode = make_counter_node("forward_source_node_test")
+    ForwardTargetNode = make_counter_node(
+        "forward_target_node_test", does_trigger=False
+    )
+
+    node_a = ForwardSourceNode()
+    node_b = ForwardTargetNode()
+    node_a.inputs["value"].connect(node_b.inputs["value"])
+
+    node_a.inputs["value"].value = 42
+    await fn.run_until_complete(node_a, node_b)
+
+    assert node_a.inputs["value"].value == 42
+    assert node_b.inputs["value"].value == 42
+    assert node_a.call_count == 1
+    assert node_b.call_count == 0
+    assert node_a.outputs["output"].value == 42
+    assert node_b.outputs["output"].value is fn.NoValue
+
+
+@funcnodes_test
+async def test_forwarded_input_uses_target_flag_when_source_flag_disables_self_only():
+    ForwardSourceNode = make_counter_node(
+        "forward_source_node_no_trigger_test", does_trigger=False
+    )
+    ForwardTargetNode = make_counter_node("forward_target_node_allow_test")
+
+    node_a = ForwardSourceNode()
+    node_b = ForwardTargetNode()
+    node_a.inputs["value"].connect(node_b.inputs["value"])
+
+    node_a.inputs["value"].value = 42
+    await fn.run_until_complete(node_a, node_b)
+
+    assert node_a.call_count == 0
+    assert node_b.call_count == 1
+    assert node_b.inputs["value"].value == 42
+    assert node_b.outputs["output"].value == 42
+
+
+@funcnodes_test
+async def test_forwarded_input_propagates_explicit_false_downstream():
+    ForwardSourceNode = make_counter_node("forward_source_node_explicit_false_test")
+    ForwardTargetNode = make_counter_node("forward_target_node_explicit_false_test")
+
+    node_a = ForwardSourceNode()
+    node_b = ForwardTargetNode()
+    node_a.inputs["value"].connect(node_b.inputs["value"])
+
+    node_a.inputs["value"].set_value(42, does_trigger=False)
+    await fn.run_until_complete(node_a, node_b)
+
+    assert node_a.call_count == 0
+    assert node_b.call_count == 0
+    assert node_b.inputs["value"].value == 42
+    assert node_b.outputs["output"].value is fn.NoValue
+
+
+@funcnodes_test
+async def test_forwarded_input_triggers_downstream_when_both_allow_triggering():
+    ForwardSourceNode = make_counter_node("forward_source_node_trigger_test")
+    ForwardTargetNode = make_counter_node("forward_target_node_trigger_test")
+
+    node_a = ForwardSourceNode()
+    node_b = ForwardTargetNode()
+    node_a.inputs["value"].connect(node_b.inputs["value"])
+
+    node_a.inputs["value"].value = 42
+    await fn.run_until_complete(node_a, node_b)
+
+    assert node_a.call_count == 1
+    assert node_b.call_count == 1
+    assert node_b.outputs["output"].value == 42
+
+
+@funcnodes_test
+async def test_forward_chain_skips_non_triggering_middle_node_but_triggers_downstream():
+    NodeA = make_counter_node("forward_chain_source_node_test")
+    NodeB = make_counter_node("forward_chain_middle_node_test", does_trigger=False)
+    NodeC = make_counter_node("forward_chain_target_node_test")
+
+    node_a = NodeA()
+    node_b = NodeB()
+    node_c = NodeC()
+
+    node_a.inputs["value"].connect(node_b.inputs["value"])
+    node_b.inputs["value"].connect(node_c.inputs["value"])
+
+    node_a.inputs["value"].value = 42
+    await fn.run_until_complete(node_a, node_b, node_c)
+
+    assert node_a.call_count == 1
+    assert node_b.call_count == 0
+    assert node_c.call_count == 1
+    assert node_b.inputs["value"].value == 42
+    assert node_c.inputs["value"].value == 42
+    assert node_b.outputs["output"].value is fn.NoValue
+    assert node_c.outputs["output"].value == 42
+
+
+@funcnodes_test
+async def test_output_set_value_respects_explicit_false_downstream():
+    SourceNode = make_counter_node("output_source_node_explicit_false_test")
+    TargetNode = make_counter_node("output_target_node_explicit_false_test")
+
+    node_a = SourceNode()
+    node_b = TargetNode()
+    node_a.outputs["output"].connect(node_b.inputs["value"])
+
+    node_a.outputs["output"].set_value(42, does_trigger=False)
+    await fn.run_until_complete(node_a, node_b)
+
+    assert node_b.inputs["value"].value == 42
+    assert node_b.call_count == 0
+    assert node_b.outputs["output"].value is fn.NoValue
+
+
+@funcnodes_test
+async def test_output_set_value_uses_target_does_trigger_flag_when_unspecified():
+    SourceNode = make_counter_node("output_source_node_unspecified_test")
+    TargetNode = make_counter_node(
+        "output_target_node_unspecified_false_test", does_trigger=False
+    )
+
+    node_a = SourceNode()
+    node_b = TargetNode()
+    node_a.outputs["output"].connect(node_b.inputs["value"])
+
+    node_a.outputs["output"].set_value(42)
+    await fn.run_until_complete(node_a, node_b)
+
+    assert node_b.inputs["value"].value == 42
+    assert node_b.call_count == 0
+    assert node_b.outputs["output"].value is fn.NoValue
+
+
+@funcnodes_test
+async def test_output_set_value_triggers_target_when_target_allows_triggering():
+    SourceNode = make_counter_node("output_source_node_trigger_test")
+    TargetNode = make_counter_node("output_target_node_trigger_test")
+
+    node_a = SourceNode()
+    node_b = TargetNode()
+    node_a.outputs["output"].connect(node_b.inputs["value"])
+
+    node_a.outputs["output"].set_value(42)
+    await fn.run_until_complete(node_a, node_b)
+
+    assert node_b.inputs["value"].value == 42
+    assert node_b.call_count == 1
+    assert node_b.outputs["output"].value == 42
 
 
 @funcnodes_test
