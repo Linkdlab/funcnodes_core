@@ -1,3 +1,14 @@
+## v2.4.0 (2026-03-17)
+
+### Feat
+
+- **context**: add context7 configuration file with URL and public key
+
+### Fix
+
+- **io**: preserve trigger propagation semantics across node chains
+- **tests**: correct typo in test function name for clarity
+
 ## v2.3.2 (2025-12-24)
 
 ### Fix
