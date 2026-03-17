@@ -1039,10 +1039,11 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
 
         self.datapath = new_datapath
 
+        resolved_does_trigger = does_trigger
         if self.node is not None:
-            if does_trigger is None:
-                does_trigger = self.does_trigger
-            if does_trigger:
+            if resolved_does_trigger is None:
+                resolved_does_trigger = self.does_trigger
+            if resolved_does_trigger:
                 self.node.request_trigger()
 
         for other in self._forwards:
@@ -1153,7 +1154,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         self._forwards.add(other)
         other.forwards_from(self, replace=replace)
 
-        other.set_value(self.value)
+        other.set_value(self.value, does_trigger=False)
 
         return [
             self.node.uuid if self.node else None,
@@ -1304,6 +1305,7 @@ class NodeOutput(NodeIO):
         else:
             datapath = None
             # input_paths = []
+        propagated_does_trigger = False if does_trigger is False else None
         for other in self.connections:
             # if self.node is not None:
             #     for input_path in input_paths:
@@ -1311,7 +1313,11 @@ class NodeOutput(NodeIO):
             # else:
             #     datapath = None
 
-            other.set_value(value, does_trigger=does_trigger, datapath=datapath)
+            other.set_value(
+                value,
+                does_trigger=propagated_does_trigger,
+                datapath=datapath,
+            )
 
     def post_connect(self, other: NodeIO):
         """Called after a connection is made.
