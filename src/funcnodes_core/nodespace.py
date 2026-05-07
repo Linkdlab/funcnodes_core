@@ -1,4 +1,4 @@
-from typing import List, Dict, TypedDict, Tuple, Any
+from typing import List, Dict, TypedDict, Tuple, Any, Optional
 import json
 from uuid import uuid4
 import traceback
@@ -482,6 +482,300 @@ class NodeSpace(EventEmitterMixin):
         return self._nodes[nid]
 
     # endregion nodes
+
+    # region executable grouping
+
+    @staticmethod
+    def _group_boundary_id(prefix: str, node: Node, io: NodeInput | NodeOutput) -> str:
+        """Build a stable public boundary id for a crossing edge endpoint.
+
+        Args:
+          prefix: Directional boundary prefix. Incoming selected inputs use
+            ``"in"`` and outgoing selected outputs use ``"out"``.
+          node: Selected node that owns the internal endpoint.
+          io: Internal endpoint represented at the group boundary.
+
+        Returns:
+          A deterministic id that is unique for the selected endpoint inside the
+          new group.
+        """
+
+        return f"{prefix}_{node.uuid}_{io.uuid}"
+
+    @staticmethod
+    def _group_boundary_options(
+        boundary_id: str, io: NodeInput | NodeOutput
+    ) -> Dict[str, Any]:
+        """Copy public IO metadata for a generated group boundary.
+
+        Args:
+          boundary_id: Stable id to use for the public and gateway IO pair.
+          io: Existing selected endpoint whose user-facing metadata should be
+            mirrored at the group boundary.
+
+        Returns:
+          Keyword options suitable for `GroupNode.add_group_input` or
+          `GroupNode.add_group_output`.
+
+        Runtime values are intentionally dropped. Group construction rewires the
+        graph topology; it does not snapshot transient IO values into the new
+        boundary.
+        """
+
+        options = dict(io.serialize(drop=False))
+        options["id"] = boundary_id
+        options.pop("is_input", None)
+        options.pop("value", None)
+        return options
+
+    def _validate_group_node_selection(self, node_ids: List[str]) -> Dict[str, Node]:
+        """Validate a group-from-selection request before any mutation.
+
+        Args:
+          node_ids: UUIDs of nodes that should move into the new executable
+            group.
+
+        Returns:
+          A dictionary of selected node UUIDs to live nodes.
+
+        Raises:
+          ValueError: If the selection is empty, contains duplicates, references
+            a missing node, selects gateway implementation nodes directly, or
+            includes a node that is currently active or queued.
+        """
+
+        if not node_ids:
+            raise ValueError("Cannot create a group from an empty selection")
+        if len(set(node_ids)) != len(node_ids):
+            raise ValueError("Cannot create a group from duplicate node ids")
+
+        from .group_nodes import GroupInputNode, GroupOutputNode
+
+        selected: Dict[str, Node] = {}
+        for node_id in node_ids:
+            if node_id not in self._nodes:
+                raise ValueError(f"Selected node '{node_id}' not found in nodespace")
+            node = self._nodes[node_id]
+            if isinstance(node, (GroupInputNode, GroupOutputNode)):
+                raise ValueError("Cannot group internal group gateway nodes directly")
+            if node.in_trigger or node.will_trigger:
+                raise ValueError(f"Selected node '{node_id}' is currently triggering")
+            selected[node_id] = node
+        return selected
+
+    def _collect_group_node_crossing_edges(
+        self, selected_ids: set[str]
+    ) -> tuple[
+        List[tuple[NodeOutput, NodeInput]],
+        List[tuple[NodeOutput, NodeInput]],
+    ]:
+        """Collect supported edges that cross a selected group boundary.
+
+        Args:
+          selected_ids: UUIDs of nodes that will move into the group.
+
+        Returns:
+          A tuple ``(incoming_edges, outgoing_edges)``. Incoming edges originate
+          outside the selection and target a selected input. Outgoing edges
+          originate at a selected output and target an outside input.
+
+        Raises:
+          ValueError: If a crossing edge uses input-forwarding rather than a
+            normal output-to-input connection. Forwarding is preserved for fully
+            internal selected edges, but crossing forwarding needs a dedicated
+            boundary policy and is rejected before mutation in this milestone.
+        """
+
+        incoming_edges: List[tuple[NodeOutput, NodeInput]] = []
+        outgoing_edges: List[tuple[NodeOutput, NodeInput]] = []
+        for source_io, target_input in self.edges:
+            source_node = source_io.node
+            target_node = target_input.node
+            if source_node is None or target_node is None:
+                continue
+
+            source_selected = source_node.uuid in selected_ids
+            target_selected = target_node.uuid in selected_ids
+            if source_selected == target_selected:
+                continue
+            if not isinstance(source_io, NodeOutput):
+                raise ValueError(
+                    "Grouping crossing input-forward edges is not supported"
+                )
+            if source_selected:
+                outgoing_edges.append((source_io, target_input))
+            else:
+                incoming_edges.append((source_io, target_input))
+        return incoming_edges, outgoing_edges
+
+    def _detach_node_instance_for_grouping(self, node: Node) -> Node:
+        """Detach a node from this parent space without destroying its IO.
+
+        `remove_node_instance()` is intentionally not used for group
+        construction because it disconnects same-space edges and calls
+        `Node.cleanup()`, which removes the IO objects that must survive inside
+        the group. This helper performs only the ownership/event bookkeeping
+        needed to move a live node into another `NodeSpace`.
+
+        Args:
+          node: Live node currently owned by this `NodeSpace`.
+
+        Returns:
+          The same node instance, now detached from this space.
+
+        Raises:
+          ValueError: If the node is not owned by this space.
+        """
+
+        if node.uuid not in self._nodes:
+            raise ValueError(f"node with uuid '{node.uuid}' not found in nodespace")
+        self.groups.ungroup_nodes([node.uuid])
+        moved = self._nodes.pop(node.uuid)
+        moved.nodespace = None
+        moved.off("*", self.on_node_event)
+        moved.off_error(self.on_node_error)
+        self.emit("node_removed", MessageInArgs(node=moved.uuid))
+        return moved
+
+    def group_nodes_as_node(
+        self,
+        node_ids: List[str],
+        *,
+        group_id: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> Node:
+        """Replace selected nodes with one executable `GroupNode`.
+
+        Args:
+          node_ids: UUIDs of parent-space nodes to move into the new group.
+          group_id: Optional UUID for the new outer `GroupNode`.
+          name: Optional display name for the new outer `GroupNode`.
+
+        Returns:
+          The created `GroupNode` instance.
+
+        The method converts every supported crossing edge through generated
+        gateway boundaries:
+
+        - external output -> selected input becomes external output -> group
+          public input and group input gateway output -> selected input.
+        - selected output -> external input becomes selected output -> group
+          output gateway input and group public output -> external input.
+
+        Selected-to-selected edges are left connected while the selected nodes
+        move into the group, so their topology and UUIDs are preserved. All
+        validation happens before mutation for the invalid-selection cases this
+        milestone supports.
+        """
+
+        from .group_nodes import GroupNode
+
+        selected = self._validate_group_node_selection(node_ids)
+        selected_ids = set(selected)
+        incoming_edges, outgoing_edges = self._collect_group_node_crossing_edges(
+            selected_ids
+        )
+
+        group = GroupNode(uuid=group_id, name=name)
+        if group.uuid in self._nodes:
+            raise ValueError(f"node with uuid '{group.uuid}' already exists")
+
+        incoming_boundaries: Dict[tuple[str, str], str] = {}
+        for _, internal_input in incoming_edges:
+            internal_node = internal_input.node
+            if internal_node is None:
+                continue
+            key = (internal_node.uuid, internal_input.uuid)
+            if key not in incoming_boundaries:
+                boundary_id = self._group_boundary_id(
+                    "in", internal_node, internal_input
+                )
+                group.add_group_input(
+                    **self._group_boundary_options(boundary_id, internal_input)
+                )
+                incoming_boundaries[key] = boundary_id
+
+        outgoing_boundaries: Dict[tuple[str, str], str] = {}
+        for internal_output, _ in outgoing_edges:
+            internal_node = internal_output.node
+            if internal_node is None:
+                continue
+            key = (internal_node.uuid, internal_output.uuid)
+            if key not in outgoing_boundaries:
+                boundary_id = self._group_boundary_id(
+                    "out", internal_node, internal_output
+                )
+                boundary_options = self._group_boundary_options(
+                    boundary_id, internal_output
+                )
+                boundary_options["does_trigger"] = False
+                group.add_group_output(**boundary_options)
+                outgoing_boundaries[key] = boundary_id
+
+        for external_output, internal_input in incoming_edges:
+            external_output.disconnect(internal_input)
+        for internal_output, external_input in outgoing_edges:
+            internal_output.disconnect(external_input)
+
+        for node_id in node_ids:
+            group.inner_nodespace.add_node_instance(
+                self._detach_node_instance_for_grouping(selected[node_id])
+            )
+
+        self.lib.add_node(GroupNode, "groups")
+        self.add_node_instance(group)
+
+        for _, internal_input in incoming_edges:
+            internal_node = internal_input.node
+            if internal_node is None:
+                continue
+            boundary_id = incoming_boundaries[(internal_node.uuid, internal_input.uuid)]
+            binding = group.input_bindings[boundary_id]
+            group.group_input_node.outputs[binding["gateway_io"]].connect(
+                internal_input
+            )
+
+        for internal_output, external_input in outgoing_edges:
+            internal_node = internal_output.node
+            if internal_node is None:
+                continue
+            boundary_id = outgoing_boundaries[
+                (internal_node.uuid, internal_output.uuid)
+            ]
+            binding = group.output_bindings[boundary_id]
+            internal_output.connect(
+                group.group_output_node.inputs[binding["gateway_io"]]
+            )
+            group.outputs[binding["public_io"]].connect(external_input)
+
+        for external_output, internal_input in incoming_edges:
+            internal_node = internal_input.node
+            if internal_node is None:
+                continue
+            boundary_id = incoming_boundaries[(internal_node.uuid, internal_input.uuid)]
+            binding = group.input_bindings[boundary_id]
+            external_output.connect(group.inputs[binding["public_io"]])
+
+        return group
+
+    def create_group_node(
+        self,
+        node_ids: List[str],
+        *,
+        group_id: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> Node:
+        """Alias for `group_nodes_as_node`.
+
+        The shorter name is useful for callers that think in terms of creating a
+        new executable node, while `group_nodes_as_node` makes the replacement
+        behavior explicit. Both APIs share the same implementation and
+        guarantees.
+        """
+
+        return self.group_nodes_as_node(node_ids, group_id=group_id, name=name)
+
+    # endregion executable grouping
 
     # region edges
     # region add/remove edges
