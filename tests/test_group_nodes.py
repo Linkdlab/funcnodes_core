@@ -8,6 +8,7 @@ from funcnodes_core import (
     NodeInput,
     NodeOutput,
     NodeSpace,
+    NoValue,
 )
 
 
@@ -345,3 +346,53 @@ def test_group_node_remove_missing_boundary_ids_raises_clear_error():
         group.remove_group_input("missing")
     with pytest.raises(ValueError, match="Group output .* not found"):
         group.remove_group_output("missing")
+
+
+async def test_group_node_trigger_copies_public_inputs_to_gateway_outputs():
+    group = GroupNode()
+    group.add_group_input(id="value", type=int, does_trigger=False)
+    internal_sink = GatewaySinkNode()
+    group.inner_nodespace.add_node_instance(internal_sink)
+    group.group_input_node.outputs["value"].connect(internal_sink.inputs["value"])
+    group.inputs["value"].set_value(17, does_trigger=False)
+
+    await group.trigger()
+
+    assert group.group_input_node.outputs["value"].value == 17
+    assert internal_sink.inputs["value"].value == 17
+
+
+async def test_group_node_trigger_copies_gateway_inputs_to_public_outputs():
+    group = GroupNode()
+    public_output = group.add_group_output(
+        id="result",
+        type=int,
+        required=False,
+        does_trigger=False,
+    )
+    external_sink = GatewaySinkNode()
+    public_output.connect(external_sink.inputs["value"])
+
+    group.group_output_node.inputs["result"].set_value(23, does_trigger=False)
+
+    assert public_output.value is NoValue
+    assert external_sink.inputs["value"].value == 0
+
+    await group.trigger()
+
+    assert public_output.value == 23
+    assert external_sink.inputs["value"].value == 23
+
+
+async def test_group_node_trigger_skips_unset_gateway_outputs():
+    group = GroupNode()
+    public_output = group.add_group_output(
+        id="optional",
+        type=int,
+        required=False,
+        does_trigger=False,
+    )
+
+    await group.trigger()
+
+    assert public_output.value is NoValue

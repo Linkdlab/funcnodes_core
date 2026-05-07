@@ -6,13 +6,14 @@ needed by the early grouping milestones:
 
 - `GroupInputNode` is the internal gateway for values entering a group.
 - `GroupOutputNode` is the internal gateway for values leaving a group.
-- `GroupNode` is a normal `Node` with its own internal `NodeSpace` and exactly
-  one input gateway plus one output gateway.
+- `GroupNode` is a normal `Node` with its own internal `NodeSpace`, exactly
+  one input gateway plus one output gateway, and simple boundary value
+  mirroring.
 
-The actual trigger barrier, boundary value mirroring, full group serialization,
-and node-selection grouping APIs are intentionally handled by later milestones.
-The classes here should therefore stay additive and should not change global
-connection behavior in `NodeIO`.
+The actual trigger barrier, full group serialization, and node-selection
+grouping APIs are intentionally handled by later milestones. The classes here
+should therefore stay additive and should not change global connection behavior
+in `NodeIO`.
 """
 
 from __future__ import annotations
@@ -20,7 +21,13 @@ from __future__ import annotations
 from typing import Any, Iterator, Literal, TYPE_CHECKING, cast
 from typing_extensions import NotRequired, TypedDict
 
-from .io import NodeInput, NodeInputSerialization, NodeOutput, NodeOutputSerialization
+from .io import (
+    NoValue,
+    NodeInput,
+    NodeInputSerialization,
+    NodeOutput,
+    NodeOutputSerialization,
+)
 from .node import Node, NodeJSON
 
 if TYPE_CHECKING:
@@ -330,17 +337,19 @@ class GroupNode(Node):
 
     `GroupNode` is the public node that will eventually behave as a complete
     executable node group. In the current milestone it owns the structural
-    pieces only:
+    pieces and the first simple boundary value mirroring behavior:
 
     - an internal `NodeSpace`
     - one `GroupInputNode`
     - one `GroupOutputNode`
     - in-memory boundary bindings
     - dynamic public boundary IO add/remove APIs
+    - public input to gateway output mirroring on trigger
+    - gateway input to public output mirroring on trigger
 
-    It deliberately does not yet mirror values across the boundary, wait for
-    internal triggers, serialize its internal graph, or provide group-from-
-    selection APIs. Those behaviors are implemented in later milestones.
+    It deliberately does not yet wait for internal triggers, serialize its
+    internal graph, or provide group-from-selection APIs. Those behaviors are
+    implemented in later milestones.
     """
 
     node_id = "funcnodes_core.group"
@@ -610,12 +619,61 @@ class GroupNode(Node):
                 continue
             yield node
 
-    async def func(self, **kwargs):
-        """No-op group trigger function for the skeleton milestone.
+    def _copy_public_inputs_to_gateway_outputs(self) -> None:
+        """Mirror ready public group inputs to internal gateway outputs.
 
-        Later milestones will replace this with boundary value mirroring and an
-        internal trigger barrier. Returning `None` for now keeps the group as a
-        valid `Node` without changing execution semantics.
+        Each input binding maps one public `GroupNode` input to one
+        `GroupInputNode` output. Copying through `NodeOutput.set_value` reuses
+        existing output-to-input propagation for any internal nodes connected to
+        that gateway output.
+
+        Inputs whose value is `NoValue` are skipped. This allows optional or
+        not-yet-provided boundaries to exist without forcing an internal value.
         """
 
+        for binding in self.input_bindings.values():
+            public_input = self.get_input(binding["public_io"])
+            value = public_input.value
+            if value is NoValue:
+                continue
+            gateway_output = self.group_input_node.get_output(binding["gateway_io"])
+            gateway_output.set_value(value)
+
+    def _copy_gateway_inputs_to_public_outputs(self) -> None:
+        """Mirror ready internal gateway inputs to public group outputs.
+
+        Each output binding maps one `GroupOutputNode` input to one public
+        `GroupNode` output. Copying through `NodeOutput.set_value` ensures that
+        downstream external connections see the value through the standard
+        FuncNodes propagation path.
+
+        Gateway inputs whose value is `NoValue` are skipped so unset optional
+        outputs do not overwrite public output state or raise during this
+        milestone's simple trigger flow.
+        """
+
+        for binding in self.output_bindings.values():
+            gateway_input = self.group_output_node.get_input(binding["gateway_io"])
+            value = gateway_input.value
+            if value is NoValue:
+                continue
+            public_output = self.get_output(binding["public_io"])
+            public_output.set_value(value)
+
+    async def func(self, **kwargs):
+        """Run the current simple group trigger flow.
+
+        The current milestone mirrors values across the group boundary in two
+        phases:
+
+        1. public inputs -> `GroupInputNode` outputs
+        2. `GroupOutputNode` inputs -> public outputs
+
+        It intentionally does not yet wait for triggered internal nodes to
+        finish. The full internal trigger barrier is added by the next runtime
+        milestone.
+        """
+
+        self._copy_public_inputs_to_gateway_outputs()
+        self._copy_gateway_inputs_to_public_outputs()
         return None
