@@ -208,3 +208,140 @@ def test_group_node_can_be_added_to_outer_nodespace_normally():
     assert group.nodespace is space
     assert group.group_input_node.nodespace is group.inner_nodespace
     assert group.group_output_node.nodespace is group.inner_nodespace
+
+
+def test_group_node_add_group_input_creates_public_input_gateway_output_and_binding():
+    group = GroupNode()
+
+    public_input = group.add_group_input(
+        id="threshold",
+        name="Threshold",
+        type=int,
+        description="Minimum value",
+        required=False,
+        default=3,
+        does_trigger=False,
+    )
+
+    gateway_output = group.group_input_node.outputs["threshold"]
+    binding = group.input_bindings["threshold"]
+
+    assert public_input is group.inputs["threshold"]
+    assert public_input.is_input() is True
+    assert public_input.name == "Threshold"
+    assert public_input.default == 3
+    assert public_input.required is False
+    assert public_input.does_trigger is False
+    assert gateway_output.is_input() is False
+    assert gateway_output.name == "Threshold"
+    assert gateway_output.serialize()["description"] == "Minimum value"
+    assert binding["id"] == "threshold"
+    assert binding["direction"] == "input"
+    assert binding["public_io"] == "threshold"
+    assert binding["gateway_node"] == group.group_input_node_uuid
+    assert binding["gateway_io"] == "threshold"
+
+
+def test_group_node_add_group_output_creates_public_output_gateway_input_and_binding():
+    group = GroupNode()
+
+    public_output = group.add_group_output(
+        id="result",
+        name="Result",
+        type=float,
+        description="Computed value",
+        required=False,
+        does_trigger=False,
+    )
+
+    gateway_input = group.group_output_node.inputs["result"]
+    binding = group.output_bindings["result"]
+
+    assert public_output is group.outputs["result"]
+    assert public_output.is_input() is False
+    assert public_output.name == "Result"
+    assert public_output.serialize()["description"] == "Computed value"
+    assert gateway_input.is_input() is True
+    assert gateway_input.name == "Result"
+    assert gateway_input.required is False
+    assert gateway_input.does_trigger is False
+    assert binding["id"] == "result"
+    assert binding["direction"] == "output"
+    assert binding["public_io"] == "result"
+    assert binding["gateway_node"] == group.group_output_node_uuid
+    assert binding["gateway_io"] == "result"
+
+
+def test_group_node_remove_group_input_disconnects_public_and_gateway_io():
+    group = GroupNode()
+    public_input = group.add_group_input(id="value", type=int)
+    gateway_output = group.group_input_node.outputs["value"]
+    external_source = GatewaySourceNode()
+    internal_sink = GatewaySinkNode()
+    external_source.outputs["value"].connect(public_input)
+    gateway_output.connect(internal_sink.inputs["value"])
+
+    removed_public, removed_gateway = group.remove_group_input("value")
+
+    assert removed_public is public_input
+    assert removed_gateway is gateway_output
+    assert "value" not in group.inputs
+    assert "value" not in group.group_input_node.outputs
+    assert "value" not in group.input_bindings
+    assert external_source.outputs["value"].connections == []
+    assert public_input.connections == []
+    assert gateway_output.connections == []
+    assert internal_sink.inputs["value"].connections == []
+
+
+def test_group_node_remove_group_output_disconnects_public_and_gateway_io():
+    group = GroupNode()
+    public_output = group.add_group_output(id="value", type=int)
+    gateway_input = group.group_output_node.inputs["value"]
+    internal_source = GatewaySourceNode()
+    external_sink = GatewaySinkNode()
+    internal_source.outputs["value"].connect(gateway_input)
+    public_output.connect(external_sink.inputs["value"])
+
+    removed_public, removed_gateway = group.remove_group_output("value")
+
+    assert removed_public is public_output
+    assert removed_gateway is gateway_input
+    assert "value" not in group.outputs
+    assert "value" not in group.group_output_node.inputs
+    assert "value" not in group.output_bindings
+    assert internal_source.outputs["value"].connections == []
+    assert gateway_input.connections == []
+    assert public_output.connections == []
+    assert external_sink.inputs["value"].connections == []
+
+
+def test_group_node_rejects_duplicate_boundary_ids_without_partial_mutation():
+    group = GroupNode()
+    group.add_group_input(id="value", type=int)
+    group.add_group_output(id="result", type=int)
+    input_count = len(group.inputs)
+    output_count = len(group.outputs)
+    gateway_output_count = len(group.group_input_node.outputs)
+    gateway_input_count = len(group.group_output_node.inputs)
+
+    with pytest.raises(ValueError, match="Group input .* already exists"):
+        group.add_group_input(id="value", type=float)
+    with pytest.raises(ValueError, match="Group output .* already exists"):
+        group.add_group_output(id="result", type=float)
+
+    assert len(group.inputs) == input_count
+    assert len(group.outputs) == output_count
+    assert len(group.group_input_node.outputs) == gateway_output_count
+    assert len(group.group_output_node.inputs) == gateway_input_count
+    assert group.inputs["value"].serialize(drop=False)["type"] == "int"
+    assert group.outputs["result"].serialize(drop=False)["type"] == "int"
+
+
+def test_group_node_remove_missing_boundary_ids_raises_clear_error():
+    group = GroupNode()
+
+    with pytest.raises(ValueError, match="Group input .* not found"):
+        group.remove_group_input("missing")
+    with pytest.raises(ValueError, match="Group output .* not found"):
+        group.remove_group_output("missing")
