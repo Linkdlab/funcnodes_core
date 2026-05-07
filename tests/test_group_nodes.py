@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from funcnodes_core import (
@@ -10,6 +12,7 @@ from funcnodes_core import (
     NodeSpace,
     NoValue,
 )
+from funcnodes_core.exceptions import InTriggerError
 
 
 class GatewaySinkNode(Node):
@@ -30,6 +33,20 @@ class GatewaySourceNode(Node):
 
     async def func(self) -> int:
         return 1
+
+
+class SlowDoubleNode(Node):
+    node_id = "test_group_nodes_slow_double"
+    node_name = "Slow Double"
+    default_trigger_on_create = False
+    value = NodeInput(id="value", type=int)
+    result = NodeOutput(id="result", type=int)
+
+    async def func(self, value: int) -> int:
+        await asyncio.sleep(0.05)
+        result = value * 2
+        self.outputs["result"].value = result
+        return result
 
 
 def test_gateway_nodes_are_public_node_classes_without_auto_trigger():
@@ -396,3 +413,71 @@ async def test_group_node_trigger_skips_unset_gateway_outputs():
     await group.trigger()
 
     assert public_output.value is NoValue
+
+
+async def test_group_node_trigger_waits_for_internal_async_nodes_before_output():
+    group = GroupNode()
+    group.add_group_input(id="value", type=int, does_trigger=False)
+    public_output = group.add_group_output(
+        id="result",
+        type=int,
+        required=False,
+        does_trigger=False,
+    )
+    slow = SlowDoubleNode()
+    group.inner_nodespace.add_node_instance(slow)
+    group.group_input_node.outputs["value"].connect(slow.inputs["value"])
+    slow.outputs["result"].connect(group.group_output_node.inputs["result"])
+    group.inputs["value"].set_value(21, does_trigger=False)
+
+    triggerstack = group.trigger()
+    await asyncio.sleep(0.01)
+
+    assert public_output.value is NoValue
+
+    await triggerstack
+
+    assert public_output.value == 42
+    assert group.group_output_node.inputs["result"].value == 42
+
+
+async def test_group_node_downstream_outputs_trigger_after_internal_completion():
+    group = GroupNode()
+    group.add_group_input(id="value", type=int, does_trigger=False)
+    public_output = group.add_group_output(
+        id="result",
+        type=int,
+        required=False,
+        does_trigger=False,
+    )
+    slow = SlowDoubleNode()
+    external_sink = GatewaySinkNode()
+    group.inner_nodespace.add_node_instance(slow)
+    group.group_input_node.outputs["value"].connect(slow.inputs["value"])
+    slow.outputs["result"].connect(group.group_output_node.inputs["result"])
+    public_output.connect(external_sink.inputs["value"])
+    group.inputs["value"].set_value(10, does_trigger=False)
+
+    triggerstack = group.trigger()
+    await asyncio.sleep(0.01)
+
+    assert external_sink.inputs["value"].value == 0
+
+    await triggerstack
+
+    assert external_sink.inputs["value"].value == 20
+
+
+async def test_group_node_trigger_rejects_when_inner_node_is_active():
+    group = GroupNode()
+    slow = SlowDoubleNode()
+    group.inner_nodespace.add_node_instance(slow)
+
+    slow.inputs["value"].set_value(4)
+    await asyncio.sleep(0.01)
+
+    assert slow.in_trigger is True
+    with pytest.raises(InTriggerError):
+        group.trigger()
+
+    await slow.wait_for_trigger_finish()
