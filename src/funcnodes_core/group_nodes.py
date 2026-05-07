@@ -1,28 +1,31 @@
 """Executable node group primitives.
 
 This module contains the first building blocks for Blender-style node groups.
-The current implementation is intentionally limited to the in-memory structure
-needed by the early grouping milestones:
+The implementation is intentionally additive: group nodes use normal `Node`,
+`NodeIO`, `NodeSpace`, and edge behavior instead of special-casing global
+connection logic.
 
 - `GroupInputNode` is the internal gateway for values entering a group.
 - `GroupOutputNode` is the internal gateway for values leaving a group.
 - `GroupNode` is a normal `Node` with its own internal `NodeSpace`, exactly
   one input gateway plus one output gateway, and simple boundary value
-  mirroring.
+  mirroring plus a trigger barrier.
 
-The actual trigger barrier, full group serialization, and node-selection
-grouping APIs are intentionally handled by later milestones. The classes here
-should therefore stay additive and should not change global connection behavior
-in `NodeIO`.
+The serialized representation stores the internal graph in a versioned payload
+under the outer node's `properties["group"]` entry. User properties remain
+ordinary node properties; deserialization strips the group payload before it
+delegates to the base `Node` deserializer so the live property bag is not
+polluted with implementation state.
 """
 
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from typing import Any, Iterator, Literal, TYPE_CHECKING, cast
 from typing_extensions import NotRequired, TypedDict
 
-from .exceptions import InTriggerError
+from .exceptions import InTriggerError, NodeKeyError
 from .io import (
     NoValue,
     NodeInput,
@@ -30,7 +33,7 @@ from .io import (
     NodeOutput,
     NodeOutputSerialization,
 )
-from .node import Node, NodeJSON
+from .node import FullNodeJSON, Node, NodeJSON, get_nodeclass
 
 if TYPE_CHECKING:
     from .nodespace import NodeSpace
@@ -74,6 +77,38 @@ class GroupInterfaceBinding(TypedDict):
     does_trigger: NotRequired[bool]
     render_options: NotRequired[dict[str, Any]]
     value_options: NotRequired[dict[str, Any]]
+
+
+class GroupNodePayload(TypedDict):
+    """Versioned serialized representation of a `GroupNode` internals.
+
+    The payload is stored as one value inside the outer node serialization so a
+    `GroupNode` can still round-trip through existing `NodeSpace` machinery.
+
+    Attributes:
+        version: Schema version for future migrations.
+        inner_nodespace: Serialized private `NodeSpace`, including gateway
+            nodes, user/internal nodes, edges, properties, and legacy groups.
+        input_gateway_node: UUID of the one `GroupInputNode` inside
+            `inner_nodespace`.
+        output_gateway_node: UUID of the one `GroupOutputNode` inside
+            `inner_nodespace`.
+        input_bindings: Public-input boundary bindings keyed by stable boundary
+            id.
+        output_bindings: Public-output boundary bindings keyed by stable
+            boundary id.
+    """
+
+    version: int
+    inner_nodespace: dict[str, Any]
+    input_gateway_node: str
+    output_gateway_node: str
+    input_bindings: dict[str, GroupInterfaceBinding]
+    output_bindings: dict[str, GroupInterfaceBinding]
+
+
+GROUP_NODE_PAYLOAD_VERSION = 1
+GROUP_NODE_PROPERTY_KEY = "group"
 
 
 _COMMON_IO_KEYS = (
@@ -335,11 +370,10 @@ class GroupOutputNode(Node):
 
 
 class GroupNode(Node):
-    """Executable group node skeleton.
+    """Executable group node.
 
-    `GroupNode` is the public node that will eventually behave as a complete
-    executable node group. In the current milestone it owns the structural
-    pieces and the first simple boundary value mirroring behavior:
+    `GroupNode` is the public node that behaves as one executable boundary
+    around a private internal graph. It owns:
 
     - an internal `NodeSpace`
     - one `GroupInputNode`
@@ -348,10 +382,10 @@ class GroupNode(Node):
     - dynamic public boundary IO add/remove APIs
     - public input to gateway output mirroring on trigger
     - gateway input to public output mirroring on trigger
+    - an internal trigger barrier
+    - versioned serialization for the private graph and boundary bindings
 
-    It deliberately does not yet wait for internal triggers, serialize its
-    internal graph, or provide group-from-selection APIs. Those behaviors are
-    implemented in later milestones.
+    Node-selection grouping APIs are intentionally left for later milestones.
     """
 
     node_id = "funcnodes_core.group"
@@ -452,6 +486,282 @@ class GroupNode(Node):
         """
 
         return self._output_bindings
+
+    def serialize_group_payload(self) -> GroupNodePayload:
+        """Serialize the internal group graph and boundary binding table.
+
+        Returns:
+            A versioned payload that can be stored inside the outer node's
+            serialized `properties`. The returned dictionaries are deep copies
+            of the live binding state so callers cannot mutate the group by
+            modifying the serialized value.
+        """
+
+        return GroupNodePayload(
+            version=GROUP_NODE_PAYLOAD_VERSION,
+            inner_nodespace=cast(dict[str, Any], self.inner_nodespace.serialize()),
+            input_gateway_node=self.group_input_node_uuid,
+            output_gateway_node=self.group_output_node_uuid,
+            input_bindings=deepcopy(self.input_bindings),
+            output_bindings=deepcopy(self.output_bindings),
+        )
+
+    def _attach_group_payload(self, data: dict[str, Any]) -> None:
+        """Attach the current group payload to an existing node serialization.
+
+        Args:
+            data: Mutable serialized node dictionary produced by the base
+                `Node` serializer. The method updates only the `properties`
+                entry, preserving any user properties already present.
+        """
+
+        properties = dict(data.get("properties", {}))
+        properties[GROUP_NODE_PROPERTY_KEY] = self.serialize_group_payload()
+        data["properties"] = properties
+
+    def serialize(self, drop=True) -> NodeJSON:
+        """Serialize the group node including its internal graph payload.
+
+        The outer node continues to use the normal `Node.serialize` shape. The
+        only extension is `properties["group"]`, which contains the private
+        nodespace, gateway UUIDs, and boundary binding dictionaries.
+        """
+
+        serialized = super().serialize(drop=drop)
+        self._attach_group_payload(cast(dict[str, Any], serialized))
+        return serialized
+
+    def full_serialize(self, with_io_values=False) -> FullNodeJSON:
+        """Serialize the full group node state including internal graph data.
+
+        `NodeSpace.full_serialize` calls this method when building live status
+        snapshots. Adding the same group payload here keeps complete snapshots
+        capable of reconstructing a group if a caller persists them.
+        """
+
+        serialized = super().full_serialize(with_io_values=with_io_values)
+        self._attach_group_payload(cast(dict[str, Any], serialized))
+        return serialized
+
+    @staticmethod
+    def _group_payload_from_data(data: NodeJSON) -> GroupNodePayload | None:
+        """Extract and validate a group payload from serialized node data.
+
+        Args:
+            data: Serialized outer `GroupNode` data.
+
+        Returns:
+            The validated group payload, or `None` for older serializations that
+            do not yet contain executable group internals.
+
+        Raises:
+            ValueError: If the payload exists but is not a supported schema.
+        """
+
+        properties = cast(dict[str, Any], data.get("properties", {}))
+        payload = properties.get(GROUP_NODE_PROPERTY_KEY)
+        if payload is None:
+            return None
+        if not isinstance(payload, dict):
+            raise ValueError("Group payload must be a dictionary")
+        if payload.get("version") != GROUP_NODE_PAYLOAD_VERSION:
+            raise ValueError(
+                f"Unsupported group payload version {payload.get('version')}"
+            )
+        return cast(GroupNodePayload, payload)
+
+    @staticmethod
+    def _node_data_without_group_payload(data: NodeJSON) -> NodeJSON:
+        """Return base-node data with the private group payload removed.
+
+        The payload is serialized as a property for compatibility with the
+        existing node schema, but it is implementation state rather than a user
+        property. Removing it before `Node.deserialize` prevents
+        `GroupNode.properties` from retaining a stale copy.
+        """
+
+        base_data = cast(NodeJSON, dict(data))
+        properties = dict(cast(dict[str, Any], data.get("properties", {})))
+        properties.pop(GROUP_NODE_PROPERTY_KEY, None)
+        if properties:
+            base_data["properties"] = properties  # type: ignore[typeddict-item]
+        else:
+            base_data.pop("properties", None)
+        return base_data
+
+    def _clear_group_boundary_io(self) -> None:
+        """Remove existing public boundary IO before replacing group state.
+
+        Deserialization is a replacement operation. If callers reuse a
+        `GroupNode` instance, dynamic public IO from the previous group shape
+        must be disconnected and removed before the serialized public boundary
+        IO is recreated.
+        """
+
+        for binding in list(self._input_bindings.values()):
+            public_input = self.inputs.get(binding["public_io"])
+            if public_input is not None:
+                public_input.disconnect()
+                self.remove_input(public_input)
+        for binding in list(self._output_bindings.values()):
+            public_output = self.outputs.get(binding["public_io"])
+            if public_output is not None:
+                public_output.disconnect()
+                self.remove_output(public_output)
+        self._input_bindings = {}
+        self._output_bindings = {}
+
+    @staticmethod
+    def _register_inner_node_classes(
+        nodespace: "NodeSpace", payload: GroupNodePayload
+    ):
+        """Expose registered inner node classes to an internal `NodeSpace`.
+
+        `NodeSpace.deserialize` resolves node classes only through its local
+        library. Group payloads therefore seed the private library with every
+        currently registered node class referenced by the serialized inner
+        graph. Missing classes are intentionally skipped so `NodeSpace` can use
+        its existing `PlaceHolderNode` fallback.
+        """
+
+        for node_data in payload.get("inner_nodespace", {}).get("nodes", []):
+            node_id = node_data.get("node_id")
+            if not node_id:
+                continue
+            try:
+                node_cls = get_nodeclass(node_id)
+            except NodeKeyError:
+                continue
+            nodespace.lib.add_node(node_cls, "group")
+
+    @classmethod
+    def _deserialize_inner_nodespace(cls, payload: GroupNodePayload) -> "NodeSpace":
+        """Build a private `NodeSpace` from serialized group payload data.
+
+        Args:
+            payload: Validated version-1 group payload.
+
+        Returns:
+            A fresh `NodeSpace` containing deserialized gateway, internal nodes,
+            edges, properties, and legacy grouping metadata.
+
+        Raises:
+            ValueError: If the restored gateway UUIDs do not point to the
+                expected gateway node types.
+        """
+
+        from .nodespace import NodeSpace
+
+        inner_nodespace = NodeSpace()
+        cls._register_inner_node_classes(inner_nodespace, payload)
+        inner_nodespace.deserialize(cast(Any, payload["inner_nodespace"]))
+
+        input_gateway = inner_nodespace.get_node_by_id(payload["input_gateway_node"])
+        output_gateway = inner_nodespace.get_node_by_id(payload["output_gateway_node"])
+        if not isinstance(input_gateway, GroupInputNode):
+            raise ValueError("Group input gateway payload does not restore a gateway")
+        if not isinstance(output_gateway, GroupOutputNode):
+            raise ValueError("Group output gateway payload does not restore a gateway")
+
+        return inner_nodespace
+
+    @staticmethod
+    def _serialized_public_io_for_binding(
+        *,
+        data: NodeJSON,
+        binding: GroupInterfaceBinding,
+        is_input: bool,
+    ) -> dict[str, Any]:
+        """Create serialized public IO data for boundary reconstruction.
+
+        The primary source is the outer node's serialized `io` entry because it
+        contains current user-facing names, values, and render metadata. Binding
+        metadata is used as a fallback so payloads remain recoverable if future
+        serializers omit optional IO fields.
+        """
+
+        io_map = cast(dict[str, dict[str, Any]], data.get("io", {}))
+        public_io_id = binding["public_io"]
+        serialized = _serialized_io_with_id(public_io_id, io_map.get(public_io_id, {}))
+        serialized.setdefault("is_input", is_input)
+        serialized.setdefault("name", binding.get("name", public_io_id))
+        serialized.setdefault("type", binding.get("type", "Any"))
+
+        fallback_keys = (
+            "description",
+            "allow_multiple",
+            "render_options",
+            "value_options",
+        )
+        if is_input:
+            fallback_keys = fallback_keys + _INPUT_ONLY_IO_KEYS
+        for key in fallback_keys:
+            if key in binding and key not in serialized:
+                serialized[key] = binding[key]  # type: ignore[literal-required]
+        return serialized
+
+    def _restore_public_boundaries(
+        self, data: NodeJSON, payload: GroupNodePayload
+    ) -> None:
+        """Recreate public dynamic IO and binding tables from a payload.
+
+        Gateway dynamic IO is restored by the gateway node deserializers inside
+        `_deserialize_inner_nodespace`. This method handles only the public
+        `GroupNode` side and then stores deep copies of the binding dictionaries
+        so the live group is independent from the input serialization object.
+        """
+
+        for boundary_id, binding in payload.get("input_bindings", {}).items():
+            serialized = self._serialized_public_io_for_binding(
+                data=data,
+                binding=binding,
+                is_input=True,
+            )
+            public_input_id = serialized["id"]
+            if public_input_id not in self.inputs:
+                self.add_input(
+                    NodeInput.from_serialized_nodeio(
+                        cast(NodeInputSerialization, serialized)
+                    )
+                )
+            self._input_bindings[boundary_id] = deepcopy(binding)
+
+        for boundary_id, binding in payload.get("output_bindings", {}).items():
+            serialized = self._serialized_public_io_for_binding(
+                data=data,
+                binding=binding,
+                is_input=False,
+            )
+            public_output_id = serialized["id"]
+            if public_output_id not in self.outputs:
+                self.add_output(
+                    NodeOutput.from_serialized_nodeio(
+                        cast(NodeOutputSerialization, serialized)
+                    )
+                )
+            self._output_bindings[boundary_id] = deepcopy(binding)
+
+    def deserialize(self, data: NodeJSON):
+        """Deserialize a group node and restore its private executable graph.
+
+        Older data without a group payload still deserializes as a plain
+        `GroupNode` with the default empty internal graph created by
+        `__init__`. Version-1 payloads replace the internal nodespace, restore
+        both gateway UUIDs, recreate dynamic public boundary IO, and finally
+        delegate ordinary node fields to `Node.deserialize`.
+        """
+
+        payload = self._group_payload_from_data(data)
+        if payload is not None:
+            self._clear_group_boundary_io()
+            self._inner_nodespace = self._deserialize_inner_nodespace(payload)
+            self._group_input_node_uuid = payload["input_gateway_node"]
+            self._group_output_node_uuid = payload["output_gateway_node"]
+            self._group_input_node = self.group_input_node
+            self._group_output_node = self.group_output_node
+            self._restore_public_boundaries(data, payload)
+
+        super().deserialize(self._node_data_without_group_payload(data))
 
     def add_group_input(self, **kwargs: Any) -> NodeInput:
         """Create one public input boundary.
