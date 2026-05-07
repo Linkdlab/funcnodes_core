@@ -253,3 +253,86 @@ def test_ungroup_node_rejects_invalid_target_without_partial_mutation():
 
     assert {node.uuid for node in space.nodes} == before_nodes
     assert edge_set(space) == before_edges
+
+
+def test_deserializing_legacy_groups_does_not_auto_materialize_group_nodes():
+    space, source, add_one, double, sink = build_groupable_space()
+    space.groups.add_group(
+        "legacy",
+        node_ids=[add_one.uuid, double.uuid],
+        meta={"label": "Legacy Math"},
+    )
+    serialized = space.serialize()
+
+    restored = NodeSpace()
+    for node_class in (
+        GroupConstructionSourceNode,
+        GroupConstructionAddOneNode,
+        GroupConstructionDoubleNode,
+        GroupConstructionSinkNode,
+    ):
+        restored.lib.add_node(node_class, "tests")
+    restored.deserialize(serialized)
+
+    assert restored.serialize_groups() == serialized["groups"]
+    assert all(not isinstance(node, GroupNode) for node in restored.nodes)
+
+
+def test_materialize_group_creates_group_node_and_removes_legacy_metadata():
+    space, source, add_one, double, sink = build_groupable_space()
+    space.groups.add_group(
+        "legacy",
+        node_ids=[add_one.uuid, double.uuid],
+        meta={
+            "name": "Legacy Math",
+            "collapsed": True,
+            "render_options": {"color": "blue"},
+        },
+    )
+    space.groups.get_group("legacy")["position"] = [10.0, 20.0]
+
+    group = space.materialize_group("legacy")
+
+    assert isinstance(group, GroupNode)
+    assert group.name == "Legacy Math"
+    assert space.groups.get_group("legacy") is None
+    assert {node.uuid for node in group.iter_inner_nodes()} == {
+        add_one.uuid,
+        double.uuid,
+    }
+    assert group.get_property("legacy_group_id") == "legacy"
+    assert group.get_property("legacy_group_meta") == {
+        "name": "Legacy Math",
+        "collapsed": True,
+        "render_options": {"color": "blue"},
+    }
+    assert group.get_property("legacy_group_position") == [10.0, 20.0]
+    assert group.get_property("legacy_group_collapsed") is True
+    assert group.render_options["color"] == "blue"
+
+
+async def test_materialized_group_preserves_trigger_result():
+    space, source, add_one, double, sink = build_groupable_space()
+    space.groups.add_group("legacy", node_ids=[add_one.uuid, double.uuid])
+
+    space.materialize_group("legacy")
+    source.outputs["value"].set_value(6)
+    await space.await_done()
+
+    assert sink.inputs["value"].value == 14
+
+
+def test_materialize_group_rejects_child_groups_without_partial_mutation():
+    space, source, add_one, double, sink = build_groupable_space()
+    space.groups.add_group("parent", node_ids=[add_one.uuid])
+    space.groups.add_group("child", node_ids=[double.uuid], parent_group="parent")
+    before_nodes = {node.uuid for node in space.nodes}
+    before_edges = edge_set(space)
+    before_groups = space.serialize_groups().copy()
+
+    with pytest.raises(ValueError, match="child groups"):
+        space.materialize_group("parent")
+
+    assert {node.uuid for node in space.nodes} == before_nodes
+    assert edge_set(space) == before_edges
+    assert space.serialize_groups() == before_groups
