@@ -18,9 +18,11 @@ in `NodeIO`.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, Iterator, Literal, TYPE_CHECKING, cast
 from typing_extensions import NotRequired, TypedDict
 
+from .exceptions import InTriggerError
 from .io import (
     NoValue,
     NodeInput,
@@ -355,6 +357,7 @@ class GroupNode(Node):
     node_id = "funcnodes_core.group"
     node_name = "Group"
     default_trigger_on_create = False
+    default_inner_trigger_settle_limit = 100
 
     def __init__(self, *args: Any, **kwargs: Any):
         """Initialize the group and its private internal node space.
@@ -382,6 +385,7 @@ class GroupNode(Node):
         self._inner_nodespace.add_node_instance(self._group_output_node)
         self._group_input_node_uuid = self._group_input_node.uuid
         self._group_output_node_uuid = self._group_output_node.uuid
+        self.on("before_trigger", self._raise_if_inner_busy_before_trigger)
 
     @property
     def inner_nodespace(self) -> "NodeSpace":
@@ -601,6 +605,86 @@ class GroupNode(Node):
         self.group_output_node.remove_gateway_input(gateway_input)
         return public_output, gateway_input
 
+    def _inner_trigger_nodes(self) -> list[Node]:
+        """Return all nodes that participate in the internal trigger barrier.
+
+        Gateway nodes are included intentionally. They are structural no-op
+        nodes, but their inputs may still receive values through normal
+        FuncNodes connection logic. Including them makes the idle check reflect
+        the actual internal nodespace state instead of relying on special cases.
+        """
+
+        return list(self.inner_nodespace.nodes)
+
+    def _inner_idle(self) -> bool:
+        """Return whether the entire internal nodespace is currently idle.
+
+        A node is considered non-idle when it is already triggering or when it
+        has a pending trigger request that can run as soon as the scheduler gets
+        a chance. This is the extra readiness condition that makes the group act
+        like one outer node instead of exposing internal in-flight work.
+        """
+
+        for node in self._inner_trigger_nodes():
+            if node.in_trigger or node.will_trigger:
+                return False
+        return True
+
+    async def _await_inner_quiescence(self) -> None:
+        """Wait until the internal nodespace has no active or ready work.
+
+        Internal propagation can create new trigger tasks while earlier trigger
+        tasks are completing. For that reason this method uses a fixed-point
+        loop:
+
+        1. trigger any ready inner node with a pending request
+        2. await all currently running inner trigger tasks
+        3. repeat until no inner node is active or ready-to-trigger
+
+        Raises:
+            TimeoutError: If the internal graph does not settle within
+                `default_inner_trigger_settle_limit` iterations. The base
+                `Node.__call__` machinery will turn that into a normal node
+                trigger error.
+        """
+
+        for _ in range(self.default_inner_trigger_settle_limit):
+            for node in self._inner_trigger_nodes():
+                node.trigger_if_requested()
+
+            running_tasks = [
+                task
+                for node in self._inner_trigger_nodes()
+                if (task := getattr(node, "_trigger_task", None)) is not None
+                and not task.done()
+            ]
+            if running_tasks:
+                await asyncio.gather(*running_tasks)
+                continue
+
+            if self._inner_idle():
+                return
+
+            await asyncio.sleep(0)
+
+        raise TimeoutError("Group inner nodes did not settle after trigger")
+
+    def _raise_if_inner_busy_before_trigger(self, **kwargs: Any) -> None:
+        """Reject a new outer trigger when the internal graph is busy.
+
+        `Node.trigger` is a protected `savemethod`, so `GroupNode` cannot
+        override it directly. Instead, each group instance subscribes this guard
+        to its own `before_trigger` event. The base trigger implementation emits
+        that event before it creates the group trigger task, which gives the
+        group a supported hook for enforcing the boundary rule.
+
+        Raises:
+            InTriggerError: If any internal node is active or queued to trigger.
+        """
+
+        if not self._inner_idle():
+            raise InTriggerError("Group inner nodes are already in trigger")
+
     def iter_inner_nodes(self, include_gateways: bool = False) -> Iterator[Node]:
         """Iterate over nodes in the internal graph.
 
@@ -669,11 +753,12 @@ class GroupNode(Node):
         1. public inputs -> `GroupInputNode` outputs
         2. `GroupOutputNode` inputs -> public outputs
 
-        It intentionally does not yet wait for triggered internal nodes to
-        finish. The full internal trigger barrier is added by the next runtime
-        milestone.
+        Between those two phases it waits for all internal trigger work to
+        finish. This means downstream external nodes only see public group
+        outputs after the internal graph has reached quiescence.
         """
 
         self._copy_public_inputs_to_gateway_outputs()
+        await self._await_inner_quiescence()
         self._copy_gateway_inputs_to_public_outputs()
         return None
