@@ -481,3 +481,122 @@ async def test_group_node_trigger_rejects_when_inner_node_is_active():
         group.trigger()
 
     await slow.wait_for_trigger_finish()
+
+
+def test_group_node_serializes_versioned_group_payload():
+    group = GroupNode()
+    group.set_property("owner", "user")
+    group.add_group_input(id="value", type=int, name="Value", does_trigger=False)
+    group.add_group_output(
+        id="result",
+        type=int,
+        name="Result",
+        required=False,
+        does_trigger=False,
+    )
+    slow = SlowDoubleNode()
+    group.inner_nodespace.add_node_instance(slow)
+    group.group_input_node.outputs["value"].connect(slow.inputs["value"])
+    slow.outputs["result"].connect(group.group_output_node.inputs["result"])
+
+    serialized = group.serialize()
+    payload = serialized["properties"]["group"]
+
+    assert serialized["properties"]["owner"] == "user"
+    assert payload["version"] == 1
+    assert payload["input_gateway_node"] == group.group_input_node_uuid
+    assert payload["output_gateway_node"] == group.group_output_node_uuid
+    assert payload["input_bindings"] == group.input_bindings
+    assert payload["output_bindings"] == group.output_bindings
+    assert [node["node_id"] for node in payload["inner_nodespace"]["nodes"]] == [
+        "funcnodes_core.group.input",
+        "funcnodes_core.group.output",
+        "test_group_nodes_slow_double",
+    ]
+    assert payload["inner_nodespace"]["edges"] == [
+        [group.group_input_node_uuid, "value", slow.uuid, "value"],
+        [slow.uuid, "result", group.group_output_node_uuid, "result"],
+    ]
+
+
+async def test_group_node_deserializes_dynamic_io_bindings_and_internal_graph():
+    group = GroupNode()
+    group.set_property("owner", "user")
+    group.add_group_input(id="value", type=int, name="Value", does_trigger=False)
+    group.add_group_output(
+        id="result",
+        type=int,
+        name="Result",
+        required=False,
+        does_trigger=False,
+    )
+    slow = SlowDoubleNode()
+    group.inner_nodespace.add_node_instance(slow)
+    group.group_input_node.outputs["value"].connect(slow.inputs["value"])
+    slow.outputs["result"].connect(group.group_output_node.inputs["result"])
+    serialized = group.serialize()
+
+    restored = GroupNode()
+    restored.deserialize(serialized)
+
+    assert set(restored.inputs) == {"_triggerinput", "value"}
+    assert set(restored.outputs) == {"_triggeroutput", "result"}
+    assert restored.inputs["value"].name == "Value"
+    assert restored.outputs["result"].name == "Result"
+    assert restored.get_property("owner") == "user"
+    assert restored.get_property("group") is None
+    assert (
+        restored.input_bindings
+        == serialized["properties"]["group"]["input_bindings"]
+    )
+    assert (
+        restored.output_bindings
+        == serialized["properties"]["group"]["output_bindings"]
+    )
+    assert isinstance(restored.group_input_node, GroupInputNode)
+    assert isinstance(restored.group_output_node, GroupOutputNode)
+    assert len(list(restored.iter_inner_nodes())) == 1
+
+    restored.inputs["value"].set_value(7, does_trigger=False)
+    await restored.trigger()
+
+    assert restored.outputs["result"].value == 14
+
+
+def test_group_node_rejects_unsupported_group_payload_version():
+    group = GroupNode()
+    serialized = group.serialize()
+    serialized["properties"]["group"]["version"] = 999
+
+    with pytest.raises(ValueError, match="Unsupported group payload version"):
+        GroupNode().deserialize(serialized)
+
+
+async def test_nodespace_roundtrips_group_node_with_internal_graph():
+    group = GroupNode()
+    group.add_group_input(id="value", type=int, does_trigger=False)
+    group.add_group_output(id="result", type=int, required=False, does_trigger=False)
+    slow = SlowDoubleNode()
+    group.inner_nodespace.add_node_instance(slow)
+    group.group_input_node.outputs["value"].connect(slow.inputs["value"])
+    slow.outputs["result"].connect(group.group_output_node.inputs["result"])
+    space = NodeSpace()
+    space.lib.add_node(GroupNode, "groups")
+    space.add_node_instance(group)
+
+    serialized = space.serialize()
+
+    restored_space = NodeSpace()
+    restored_space.lib.add_node(GroupNode, "groups")
+    restored_space.deserialize(serialized)
+    restored_group = restored_space.get_node_by_id(group.uuid)
+
+    assert isinstance(restored_group, GroupNode)
+    assert restored_group.input_bindings == group.input_bindings
+    assert restored_group.output_bindings == group.output_bindings
+    assert len(list(restored_group.iter_inner_nodes())) == 1
+
+    restored_group.inputs["value"].set_value(9, does_trigger=False)
+    await restored_group.trigger()
+
+    assert restored_group.outputs["result"].value == 18
