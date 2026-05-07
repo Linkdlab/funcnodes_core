@@ -17,6 +17,7 @@ from .io import (
 )
 
 from .node import Node, get_nodeclass, NodeJSON, IONotFoundError, NodeTriggerError
+from .group_nodes import GroupInputNode, GroupOutputNode
 from .nodespace import NodeSpace, FullNodeSpaceJSON, NodeSpaceJSON
 from .lib import (
     FullLibJSON,
@@ -86,6 +87,8 @@ __all__ = [
     "NodeInputSerialization",
     "NodeOutputSerialization",
     "Node",
+    "GroupInputNode",
+    "GroupOutputNode",
     "get_nodeclass",
     "run_until_complete",
     "NodeSpace",
