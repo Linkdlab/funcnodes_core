@@ -34,6 +34,7 @@ from .io import (
     NodeOutputSerialization,
 )
 from .node import FullNodeJSON, Node, NodeJSON, get_nodeclass
+from .eventmanager import MessageInArgs
 
 if TYPE_CHECKING:
     from .nodespace import NodeSpace
@@ -109,6 +110,22 @@ class GroupNodePayload(TypedDict):
 
 GROUP_NODE_PAYLOAD_VERSION = 1
 GROUP_NODE_PROPERTY_KEY = "group"
+
+
+class GroupRuntimeStatus(TypedDict):
+    """Runtime status payload added under `GroupNode.status()["group"]`.
+
+    The base `Node.status()` dictionary remains unchanged for all other nodes.
+    `GroupNode` appends this nested payload so group-aware callers can inspect
+    internal execution state without reaching into private attributes.
+    """
+
+    inner_node_count: int
+    inner_busy: bool
+    inner_triggering_nodes: list[str]
+    gateway_nodes: dict[str, str]
+    input_bindings: dict[str, GroupInterfaceBinding]
+    output_bindings: dict[str, GroupInterfaceBinding]
 
 
 _COMMON_IO_KEYS = (
@@ -419,7 +436,46 @@ class GroupNode(Node):
         self._inner_nodespace.add_node_instance(self._group_output_node)
         self._group_input_node_uuid = self._group_input_node.uuid
         self._group_output_node_uuid = self._group_output_node.uuid
+        self._attach_inner_nodespace_events()
         self.on("before_trigger", self._raise_if_inner_busy_before_trigger)
+
+    def _attach_inner_nodespace_events(self) -> None:
+        """Subscribe this group to its private nodespace event stream.
+
+        The internal `NodeSpace` already re-emits node events as nodespace-level
+        events. Subscribing to its wildcard stream lets the outer `GroupNode`
+        provide namespaced debug events such as `inner_node_trigger_error`
+        without adding listeners to every inner node individually.
+        """
+
+        self._inner_nodespace.off("*", self._on_inner_nodespace_event)
+        self._inner_nodespace.on("*", self._on_inner_nodespace_event)
+
+    def _on_inner_nodespace_event(
+        self, event: str, src: "NodeSpace", **data: Any
+    ) -> None:
+        """Re-emit one internal nodespace event from the outer group.
+
+        Args:
+            event: Original internal event name emitted by the private
+                `NodeSpace`.
+            src: Private nodespace that emitted the event. It is accepted to
+                match wildcard listener signatures and intentionally not
+                forwarded as the public event source.
+            **data: Original event payload, for example node UUIDs or trigger
+                errors.
+
+        The namespaced event keeps the original payload and adds
+        `inner_event`. A generic `inner_event` emission is also sent so callers
+        can subscribe once and inspect all inner activity.
+        """
+
+        payload = dict(data)
+        if "node" in payload:
+            payload["inner_node"] = payload.pop("node")
+        payload["inner_event"] = event
+        self.emit(f"inner_{event}", MessageInArgs(src=self, **payload))
+        self.emit("inner_event", MessageInArgs(src=self, **payload))
 
     @property
     def inner_nodespace(self) -> "NodeSpace":
@@ -486,6 +542,75 @@ class GroupNode(Node):
         """
 
         return self._output_bindings
+
+    def group_runtime_status(self) -> GroupRuntimeStatus:
+        """Return group-specific runtime and boundary introspection data.
+
+        Returns:
+            A JSON-compatible status payload that describes the private graph
+            size, whether internal work is active or queued, which inner nodes
+            are currently busy, gateway UUIDs, and deep-copied boundary binding
+            dictionaries.
+        """
+
+        inner_nodes = list(self.iter_inner_nodes())
+        triggering_nodes = [
+            node.uuid for node in self._inner_trigger_nodes() if node.in_trigger_soon
+        ]
+        return GroupRuntimeStatus(
+            inner_node_count=len(inner_nodes),
+            inner_busy=not self._inner_idle(),
+            inner_triggering_nodes=triggering_nodes,
+            gateway_nodes={
+                "input": self.group_input_node_uuid,
+                "output": self.group_output_node_uuid,
+            },
+            input_bindings=deepcopy(self.input_bindings),
+            output_bindings=deepcopy(self.output_bindings),
+        )
+
+    def status(self) -> dict[str, Any]:
+        """Return normal node status plus a group-specific `group` section.
+
+        The base status keys are preserved unchanged. Group-aware consumers can
+        inspect the additional nested payload while existing consumers that only
+        know normal `Node.status()` can continue to read the usual keys.
+        """
+
+        status = cast(dict[str, Any], super().status())
+        status["group"] = self.group_runtime_status()
+        return status
+
+    def _emit_boundary_io_event(
+        self,
+        *,
+        event: str,
+        direction: Literal["input", "output"],
+        boundary_id: str,
+        binding: GroupInterfaceBinding,
+    ) -> None:
+        """Emit a public event for a dynamic group boundary IO change.
+
+        Args:
+            event: Event name to emit, for example `io_added` or `io_removed`.
+            direction: Boundary direction.
+            boundary_id: Stable boundary id affected by the change.
+            binding: Binding snapshot for the public/gateway IO pair.
+
+        The event payload is intentionally small and serializable. It identifies
+        the boundary and carries a deep copy of the binding so event listeners
+        cannot mutate the group's live binding tables.
+        """
+
+        self.emit(
+            event,
+            MessageInArgs(
+                src=self,
+                direction=direction,
+                boundary_id=boundary_id,
+                binding=deepcopy(binding),
+            ),
+        )
 
     def serialize_group_payload(self) -> GroupNodePayload:
         """Serialize the internal group graph and boundary binding table.
@@ -755,6 +880,7 @@ class GroupNode(Node):
         if payload is not None:
             self._clear_group_boundary_io()
             self._inner_nodespace = self._deserialize_inner_nodespace(payload)
+            self._attach_inner_nodespace_events()
             self._group_input_node_uuid = payload["input_gateway_node"]
             self._group_output_node_uuid = payload["output_gateway_node"]
             self._group_input_node = self.group_input_node
@@ -803,12 +929,19 @@ class GroupNode(Node):
             self.group_input_node.remove_gateway_output(gateway_output)
             raise
 
-        self._input_bindings[boundary_id] = _binding_from_io(
+        binding = _binding_from_io(
             boundary_id=boundary_id,
             direction="input",
             public_io=public_input,
             gateway_node=self.group_input_node,
             gateway_io=gateway_output,
+        )
+        self._input_bindings[boundary_id] = binding
+        self._emit_boundary_io_event(
+            event="io_added",
+            direction="input",
+            boundary_id=boundary_id,
+            binding=binding,
         )
         return public_input
 
@@ -837,6 +970,12 @@ class GroupNode(Node):
         public_input.disconnect()
         self.remove_input(public_input)
         self.group_input_node.remove_gateway_output(gateway_output)
+        self._emit_boundary_io_event(
+            event="io_removed",
+            direction="input",
+            boundary_id=boundary_id,
+            binding=binding,
+        )
         return public_input, gateway_output
 
     def add_group_output(self, **kwargs: Any) -> NodeOutput:
@@ -879,12 +1018,19 @@ class GroupNode(Node):
             self.group_output_node.remove_gateway_input(gateway_input)
             raise
 
-        self._output_bindings[boundary_id] = _binding_from_io(
+        binding = _binding_from_io(
             boundary_id=boundary_id,
             direction="output",
             public_io=public_output,
             gateway_node=self.group_output_node,
             gateway_io=gateway_input,
+        )
+        self._output_bindings[boundary_id] = binding
+        self._emit_boundary_io_event(
+            event="io_added",
+            direction="output",
+            boundary_id=boundary_id,
+            binding=binding,
         )
         return public_output
 
@@ -913,6 +1059,12 @@ class GroupNode(Node):
         public_output.disconnect()
         self.remove_output(public_output)
         self.group_output_node.remove_gateway_input(gateway_input)
+        self._emit_boundary_io_event(
+            event="io_removed",
+            direction="output",
+            boundary_id=boundary_id,
+            binding=binding,
+        )
         return public_output, gateway_input
 
     def _inner_trigger_nodes(self) -> list[Node]:

@@ -49,6 +49,17 @@ class SlowDoubleNode(Node):
         return result
 
 
+class FailingNode(Node):
+    node_id = "test_group_nodes_failing"
+    node_name = "Failing Node"
+    default_trigger_on_create = False
+    value = NodeInput(id="value", type=int)
+    result = NodeOutput(id="result", type=int)
+
+    async def func(self, value: int) -> int:
+        raise RuntimeError(f"cannot process {value}")
+
+
 def test_gateway_nodes_are_public_node_classes_without_auto_trigger():
     input_gateway = GroupInputNode()
     output_gateway = GroupOutputNode()
@@ -481,6 +492,77 @@ async def test_group_node_trigger_rejects_when_inner_node_is_active():
         group.trigger()
 
     await slow.wait_for_trigger_finish()
+
+
+async def test_group_node_status_reports_inner_busy_state():
+    group = GroupNode()
+    group.add_group_input(id="value", type=int, does_trigger=False)
+    group.add_group_output(id="result", type=int, required=False, does_trigger=False)
+    slow = SlowDoubleNode()
+    group.inner_nodespace.add_node_instance(slow)
+
+    slow.inputs["value"].set_value(4)
+    await asyncio.sleep(0.01)
+
+    status = group.status()
+
+    assert status["group"]["inner_busy"] is True
+    assert status["group"]["inner_node_count"] == 1
+    assert status["group"]["gateway_nodes"] == {
+        "input": group.group_input_node_uuid,
+        "output": group.group_output_node_uuid,
+    }
+    assert status["group"]["inner_triggering_nodes"] == [slow.uuid]
+    assert status["group"]["input_bindings"] == group.input_bindings
+    assert status["group"]["output_bindings"] == group.output_bindings
+
+    await slow.wait_for_trigger_finish()
+
+
+async def test_group_node_reemits_inner_trigger_errors():
+    group = GroupNode()
+    failing = FailingNode()
+    group.inner_nodespace.add_node_instance(failing)
+    events = []
+    group.on("inner_node_trigger_error", lambda **msg: events.append(msg))
+
+    failing.inputs["value"].set_value(3)
+    await failing.wait_for_trigger_finish()
+
+    assert len(events) == 1
+    assert events[0]["inner_node"] == failing.uuid
+    assert "cannot process 3" in str(events[0]["error"])
+
+
+def test_group_boundary_io_changes_emit_group_events():
+    group = GroupNode()
+    events = []
+    group.on("io_added", lambda **msg: events.append(("added", msg)))
+    group.on("io_removed", lambda **msg: events.append(("removed", msg)))
+
+    group.add_group_input(id="value", type=int, does_trigger=False)
+    group.add_group_output(id="result", type=int, required=False, does_trigger=False)
+    group.remove_group_input("value")
+    group.remove_group_output("result")
+
+    assert [event for event, _ in events] == [
+        "added",
+        "added",
+        "removed",
+        "removed",
+    ]
+    assert [msg["direction"] for _, msg in events] == [
+        "input",
+        "output",
+        "input",
+        "output",
+    ]
+    assert [msg["boundary_id"] for _, msg in events] == [
+        "value",
+        "result",
+        "value",
+        "result",
+    ]
 
 
 def test_group_node_serializes_versioned_group_payload():
