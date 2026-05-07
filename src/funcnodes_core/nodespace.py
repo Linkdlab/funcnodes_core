@@ -1,4 +1,4 @@
-from typing import List, Dict, TypedDict, Tuple, Any, Optional
+from typing import List, Dict, TypedDict, Tuple, Any, Optional, TYPE_CHECKING
 import json
 from uuid import uuid4
 import traceback
@@ -21,6 +21,9 @@ from .lib import FullLibJSON, Library, NodeClassNotFoundError, Shelf, flatten_sh
 
 from .eventmanager import EventEmitterMixin, MessageInArgs, emit_after
 from .utils.serialization import JSONEncoder, JSONDecoder, Encdata
+
+if TYPE_CHECKING:
+    from .group_nodes import GroupNode
 
 
 class NodeException(Exception):
@@ -774,6 +777,152 @@ class NodeSpace(EventEmitterMixin):
         """
 
         return self.group_nodes_as_node(node_ids, group_id=group_id, name=name)
+
+    def _validate_ungroup_target(self, group_node_uuid: str) -> "GroupNode":
+        """Validate an executable group can be ungrouped before mutation.
+
+        Args:
+          group_node_uuid: UUID of the parent-space node that should be
+            ungrouped.
+
+        Returns:
+          The live `GroupNode` instance.
+
+        Raises:
+          ValueError: If the target is missing, is not a `GroupNode`, contains
+            active inner work, or would introduce UUID conflicts in the parent
+            space.
+        """
+
+        from .group_nodes import GroupNode
+
+        if group_node_uuid not in self._nodes:
+            raise ValueError(f"Group node '{group_node_uuid}' not found")
+        group = self._nodes[group_node_uuid]
+        if not isinstance(group, GroupNode):
+            raise ValueError(f"Node '{group_node_uuid}' is not a GroupNode")
+        if group.in_trigger or group.will_trigger or not group._inner_idle():
+            raise ValueError(f"Group node '{group_node_uuid}' is currently triggering")
+
+        for inner_node in group.iter_inner_nodes():
+            if inner_node.uuid in self._nodes:
+                raise ValueError(
+                    f"Cannot ungroup node with conflicting uuid '{inner_node.uuid}'"
+                )
+        return group
+
+    @staticmethod
+    def _ungroup_input_edges(
+        group: "GroupNode",
+    ) -> List[tuple[NodeOutput, NodeInput]]:
+        """Collect direct edges represented by group input boundaries.
+
+        Args:
+          group: `GroupNode` instance being ungrouped.
+
+        Returns:
+          Direct edges to recreate after inner nodes move back to the parent
+          space. Each edge connects an external output to an internal input.
+        """
+
+        direct_edges: List[tuple[NodeOutput, NodeInput]] = []
+        for binding in group.input_bindings.values():
+            public_input = group.inputs[binding["public_io"]]
+            gateway_output = group.group_input_node.outputs[binding["gateway_io"]]
+            for external_output in public_input.connections:
+                if not isinstance(external_output, NodeOutput):
+                    continue
+                for internal_input in gateway_output.connections:
+                    direct_edges.append((external_output, internal_input))
+        return direct_edges
+
+    @staticmethod
+    def _ungroup_output_edges(
+        group: "GroupNode",
+    ) -> List[tuple[NodeOutput, NodeInput]]:
+        """Collect direct edges represented by group output boundaries.
+
+        Args:
+          group: `GroupNode` instance being ungrouped.
+
+        Returns:
+          Direct edges to recreate after inner nodes move back to the parent
+          space. Each edge connects an internal output to an external input.
+        """
+
+        direct_edges: List[tuple[NodeOutput, NodeInput]] = []
+        for binding in group.output_bindings.values():
+            gateway_input = group.group_output_node.inputs[binding["gateway_io"]]
+            public_output = group.outputs[binding["public_io"]]
+            for internal_output in gateway_input.connections:
+                if not isinstance(internal_output, NodeOutput):
+                    continue
+                for external_input in public_output.connections:
+                    direct_edges.append((internal_output, external_input))
+        return direct_edges
+
+    @staticmethod
+    def _disconnect_group_boundary_edges(group: "GroupNode") -> None:
+        """Disconnect every edge that crosses or touches group gateway IO.
+
+        Args:
+          group: `GroupNode` instance being ungrouped.
+
+        The disconnect phase is separated from the reconnect phase so the
+        parent space never temporarily contains both gateway-mediated and direct
+        copies of the same crossing edge.
+        """
+
+        for binding in group.input_bindings.values():
+            group.inputs[binding["public_io"]].disconnect()
+            group.group_input_node.outputs[binding["gateway_io"]].disconnect()
+
+        for binding in group.output_bindings.values():
+            group.group_output_node.inputs[binding["gateway_io"]].disconnect()
+            group.outputs[binding["public_io"]].disconnect()
+
+    def ungroup_node(self, group_node_uuid: str) -> List[Node]:
+        """Replace one executable `GroupNode` with its internal nodes.
+
+        Args:
+          group_node_uuid: UUID of the parent-space `GroupNode` to ungroup.
+
+        Returns:
+          The restored inner nodes, excluding the structural gateway nodes.
+
+        Boundary rewiring is the inverse of `group_nodes_as_node`:
+
+        - external output -> group public input plus gateway output -> internal
+          input becomes external output -> internal input.
+        - internal output -> gateway input plus group public output -> external
+          input becomes internal output -> external input.
+
+        Only one layer is ungrouped. If an inner node is itself a `GroupNode`, it
+        is moved back to the parent as a normal node and remains grouped
+        internally.
+        """
+
+        group = self._validate_ungroup_target(group_node_uuid)
+        incoming_edges = self._ungroup_input_edges(group)
+        outgoing_edges = self._ungroup_output_edges(group)
+        restored_nodes = list(group.iter_inner_nodes())
+
+        self._disconnect_group_boundary_edges(group)
+
+        for node in restored_nodes:
+            detached = group.inner_nodespace._detach_node_instance_for_grouping(node)
+            self.add_node_instance(detached)
+
+        group.inner_nodespace.remove_node_instance(group.group_input_node)
+        group.inner_nodespace.remove_node_instance(group.group_output_node)
+        self.remove_node_instance(group)
+
+        for internal_output, external_input in outgoing_edges:
+            internal_output.connect(external_input)
+        for external_output, internal_input in incoming_edges:
+            external_output.connect(internal_input)
+
+        return restored_nodes
 
     # endregion executable grouping
 
