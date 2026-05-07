@@ -1,11 +1,13 @@
 import pytest
 
 from funcnodes_core import (
+    GroupNode,
     GroupInputNode,
     GroupOutputNode,
     Node,
     NodeInput,
     NodeOutput,
+    NodeSpace,
 )
 
 
@@ -155,3 +157,54 @@ def test_gateway_nodes_roundtrip_dynamic_io_serialization():
     assert restored_input.serialize()["description"] == "Output boundary"
     assert restored_input.required is False
     assert restored_input.does_trigger is False
+
+
+def test_group_node_is_node_with_internal_gateway_nodes():
+    group = GroupNode()
+
+    assert isinstance(group, Node)
+    assert group.node_id == "funcnodes_core.group"
+    assert group.node_name == "Group"
+    assert group.default_trigger_on_create is False
+    assert group.in_trigger is False
+
+    assert isinstance(group.inner_nodespace, NodeSpace)
+    assert isinstance(group.group_input_node, GroupInputNode)
+    assert isinstance(group.group_output_node, GroupOutputNode)
+    assert group.group_input_node is group.inner_nodespace.get_node_by_id(
+        group.group_input_node_uuid
+    )
+    assert group.group_output_node is group.inner_nodespace.get_node_by_id(
+        group.group_output_node_uuid
+    )
+
+
+def test_group_node_starts_with_only_normal_hidden_trigger_io():
+    group = GroupNode()
+
+    assert set(group.inputs) == {"_triggerinput"}
+    assert set(group.outputs) == {"_triggeroutput"}
+    assert group.inputs["_triggerinput"].hidden is True
+    assert group.outputs["_triggeroutput"].hidden is True
+
+
+def test_group_node_inner_iteration_can_include_or_skip_gateways():
+    group = GroupNode()
+
+    assert list(group.iter_inner_nodes()) == []
+
+    inner_nodes = list(group.iter_inner_nodes(include_gateways=True))
+    assert inner_nodes == [group.group_input_node, group.group_output_node]
+
+
+def test_group_node_can_be_added_to_outer_nodespace_normally():
+    space = NodeSpace()
+    group = GroupNode()
+
+    added = space.add_node_instance(group)
+
+    assert added is group
+    assert space.get_node_by_id(group.uuid) is group
+    assert group.nodespace is space
+    assert group.group_input_node.nodespace is group.inner_nodespace
+    assert group.group_output_node.nodespace is group.inner_nodespace
