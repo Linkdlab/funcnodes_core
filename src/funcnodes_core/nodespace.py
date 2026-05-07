@@ -778,6 +778,107 @@ class NodeSpace(EventEmitterMixin):
 
         return self.group_nodes_as_node(node_ids, group_id=group_id, name=name)
 
+    @staticmethod
+    def _legacy_group_display_name(group_id: str, group: NodeGroup) -> str:
+        """Resolve a display name for a materialized legacy group.
+
+        Args:
+          group_id: Legacy `GroupingLogic` group id.
+          group: Legacy group data.
+
+        Returns:
+          The best available group display name. The bridge prefers explicit
+          ``meta["name"]``, then existing UI-style ``meta["label"]``, and falls
+          back to the stable group id.
+        """
+
+        meta = group.get("meta", {})
+        name = meta.get("name", meta.get("label", group_id))
+        return str(name)
+
+    @staticmethod
+    def _copy_legacy_group_metadata(
+        group: "GroupNode", group_id: str, legacy_group: NodeGroup
+    ) -> None:
+        """Copy UI-only legacy metadata onto an executable group node.
+
+        Args:
+          group: Newly materialized executable group.
+          group_id: Original legacy group id.
+          legacy_group: Snapshot of the legacy `NodeGroup` dictionary.
+
+        Metadata that has no first-class `Node` field is stored as regular node
+        properties under explicit ``legacy_group_*`` keys. A
+        ``meta["render_options"]`` dictionary is also merged into the group
+        node's render options because that is the normal core rendering surface.
+        """
+
+        meta = dict(legacy_group.get("meta", {}))
+        group.set_property("legacy_group_id", group_id)
+        group.set_property("legacy_group_meta", meta)
+
+        if "position" in legacy_group:
+            group.set_property("legacy_group_position", legacy_group["position"])
+        if "collapsed" in meta:
+            group.set_property("legacy_group_collapsed", meta["collapsed"])
+        if "open" in meta:
+            group.set_property("legacy_group_open", meta["open"])
+
+        render_options = meta.get("render_options")
+        if isinstance(render_options, dict):
+            group.render_options.update(render_options)
+
+    def materialize_group(self, group_id: str) -> "GroupNode":
+        """Convert one legacy UI group into an executable `GroupNode`.
+
+        Args:
+          group_id: Existing `GroupingLogic` group id to materialize.
+
+        Returns:
+          The created executable `GroupNode`.
+
+        The bridge intentionally does not run during `NodeSpace.deserialize`.
+        Old files keep their top-level ``"groups"`` data until callers
+        explicitly invoke this method. For this milestone, only direct
+        ``node_ids`` are materialized; legacy groups with child groups are
+        rejected before mutation so hierarchy flattening is never implicit.
+
+        Raises:
+          ValueError: If the group is missing, has child groups, or has no direct
+            nodes to materialize.
+        """
+
+        legacy_group = self.groups.get_group(group_id)
+        if legacy_group is None:
+            raise ValueError(f"Legacy group '{group_id}' not found")
+        if legacy_group.get("child_groups"):
+            raise ValueError(
+                f"Legacy group '{group_id}' has child groups and cannot be "
+                "materialized automatically"
+            )
+
+        node_ids = list(legacy_group.get("node_ids", []))
+        if not node_ids:
+            raise ValueError(f"Legacy group '{group_id}' has no nodes")
+
+        legacy_snapshot = NodeGroup(
+            node_ids=node_ids,
+            child_groups=list(legacy_group.get("child_groups", [])),
+            parent_group=legacy_group.get("parent_group"),
+            meta=dict(legacy_group.get("meta", {})),
+        )
+        if "position" in legacy_group:
+            legacy_snapshot["position"] = legacy_group["position"]
+
+        group = self.group_nodes_as_node(
+            node_ids,
+            name=self._legacy_group_display_name(group_id, legacy_snapshot),
+        )
+        self._copy_legacy_group_metadata(group, group_id, legacy_snapshot)
+        if self.groups.get_group(group_id) is not None:
+            self.groups.remove_group(group_id, recursive=False)
+        return group
+
     def _validate_ungroup_target(self, group_node_uuid: str) -> "GroupNode":
         """Validate an executable group can be ungrouped before mutation.
 
