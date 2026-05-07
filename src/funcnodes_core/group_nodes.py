@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any, Iterator, TYPE_CHECKING, cast
 
 from .io import NodeInput, NodeInputSerialization, NodeOutput, NodeOutputSerialization
 from .node import Node, NodeJSON
+
+if TYPE_CHECKING:
+    from .nodespace import NodeSpace
 
 
 def _serialized_io_with_id(io_id: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -84,3 +87,60 @@ class GroupOutputNode(Node):
                 )
 
         super().deserialize(data)
+
+
+class GroupNode(Node):
+    """Executable group skeleton with an internal nodespace and gateway nodes."""
+
+    node_id = "funcnodes_core.group"
+    node_name = "Group"
+    default_trigger_on_create = False
+
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+
+        from .nodespace import NodeSpace
+
+        self._inner_nodespace = NodeSpace()
+        self._group_input_node = GroupInputNode()
+        self._group_output_node = GroupOutputNode()
+        self._inner_nodespace.add_node_instance(self._group_input_node)
+        self._inner_nodespace.add_node_instance(self._group_output_node)
+        self._group_input_node_uuid = self._group_input_node.uuid
+        self._group_output_node_uuid = self._group_output_node.uuid
+
+    @property
+    def inner_nodespace(self) -> "NodeSpace":
+        return self._inner_nodespace
+
+    @property
+    def group_input_node_uuid(self) -> str:
+        return self._group_input_node_uuid
+
+    @property
+    def group_output_node_uuid(self) -> str:
+        return self._group_output_node_uuid
+
+    @property
+    def group_input_node(self) -> GroupInputNode:
+        node = self.inner_nodespace.get_node_by_id(self.group_input_node_uuid)
+        if not isinstance(node, GroupInputNode):
+            raise TypeError("Configured group input gateway is not a GroupInputNode")
+        return node
+
+    @property
+    def group_output_node(self) -> GroupOutputNode:
+        node = self.inner_nodespace.get_node_by_id(self.group_output_node_uuid)
+        if not isinstance(node, GroupOutputNode):
+            raise TypeError("Configured group output gateway is not a GroupOutputNode")
+        return node
+
+    def iter_inner_nodes(self, include_gateways: bool = False) -> Iterator[Node]:
+        gateway_ids = {self.group_input_node_uuid, self.group_output_node_uuid}
+        for node in self.inner_nodespace.nodes:
+            if not include_gateways and node.uuid in gateway_ids:
+                continue
+            yield node
+
+    async def func(self, **kwargs):
+        return None
