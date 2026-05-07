@@ -62,3 +62,51 @@ def test_set_group_parent_rejects_cycles():
     assert logic.get_group("g1")["parent_group"] is None
     assert logic.get_group("g2")["parent_group"] == "g1"
     assert logic.get_group("g3")["parent_group"] == "g2"
+
+
+def test_deserialize_rebuilds_node_lookup_and_missing_collection_fields():
+    logic = GroupingLogic()
+
+    logic.deserialize(
+        {
+            "root": {
+                "node_ids": ["n1"],
+                "child_groups": ["child"],
+                "parent_group": None,
+                "meta": {"label": "Root"},
+            },
+            "child": {
+                "node_ids": ["n2"],
+                "parent_group": "root",
+            },
+            "metadata_only": {
+                "meta": {"collapsed": True},
+            },
+        }
+    )
+
+    assert logic.find_group_of_node("n1") == "root"
+    assert logic.find_group_of_node("n2") == "child"
+    assert logic.find_group_of_node("unknown") is None
+
+    assert logic.get_group("child")["child_groups"] == []
+    assert logic.get_group("metadata_only")["node_ids"] == []
+    assert logic.get_group("metadata_only")["child_groups"] == []
+    assert logic.get_group("metadata_only")["meta"] == {"collapsed": True}
+
+
+def test_deserialize_keeps_serialized_group_dictionary_shape():
+    data = {
+        "group": {
+            "node_ids": ["node"],
+            "child_groups": [],
+            "parent_group": None,
+            "meta": {"color": "blue"},
+            "position": [1.0, 2.0],
+        }
+    }
+    logic = GroupingLogic()
+
+    logic.deserialize(data)
+
+    assert logic.serialize()["group"] == data["group"]
