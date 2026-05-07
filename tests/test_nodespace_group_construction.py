@@ -81,6 +81,12 @@ def build_groupable_space() -> tuple[
     return space, source, add_one, double, sink
 
 
+def edge_set(space: NodeSpace) -> set[tuple[str, str, str, str]]:
+    """Return serialized edges as tuples for stable topology assertions."""
+
+    return {tuple(edge) for edge in space.serialize_edges()}
+
+
 def test_group_nodes_as_node_moves_selected_nodes_and_preserves_internal_edges():
     space, source, add_one, double, sink = build_groupable_space()
 
@@ -172,3 +178,78 @@ def test_group_nodes_as_node_rejects_invalid_selection_without_partial_mutation(
     assert source.outputs["value"].connections == [add_one.inputs["value"]]
     assert add_one.outputs["result"].connections == [double.inputs["value"]]
     assert double.outputs["result"].connections == [sink.inputs["value"]]
+
+
+def test_ungroup_node_restores_simple_grouped_topology():
+    space, source, add_one, double, sink = build_groupable_space()
+    original_nodes = {node.uuid for node in space.nodes}
+    original_edges = edge_set(space)
+    group = space.group_nodes_as_node([add_one.uuid, double.uuid])
+
+    restored_nodes = space.ungroup_node(group.uuid)
+
+    assert {node.uuid for node in restored_nodes} == {add_one.uuid, double.uuid}
+    assert {node.uuid for node in space.nodes} == original_nodes
+    assert edge_set(space) == original_edges
+    assert add_one.nodespace is space
+    assert double.nodespace is space
+    assert group.nodespace is None
+
+
+def test_ungroup_node_rewires_boundaries_back_to_direct_edges():
+    space, source, add_one, double, sink = build_groupable_space()
+    group = space.group_nodes_as_node([add_one.uuid, double.uuid])
+
+    space.ungroup_node(group.uuid)
+
+    assert source.outputs["value"].connections == [add_one.inputs["value"]]
+    assert add_one.outputs["result"].connections == [double.inputs["value"]]
+    assert double.outputs["result"].connections == [sink.inputs["value"]]
+    assert group.uuid not in {node.uuid for node in space.nodes}
+
+
+async def test_group_then_ungroup_preserves_trigger_result():
+    space, source, add_one, double, sink = build_groupable_space()
+    group = space.group_nodes_as_node([add_one.uuid, double.uuid])
+    space.ungroup_node(group.uuid)
+
+    source.outputs["value"].set_value(5)
+    await space.await_done()
+
+    assert sink.inputs["value"].value == 12
+
+
+def test_ungroup_node_handles_nested_groups_one_layer_at_a_time():
+    space, source, add_one, double, sink = build_groupable_space()
+    inner_group = space.group_nodes_as_node([add_one.uuid])
+    outer_group = space.group_nodes_as_node([inner_group.uuid, double.uuid])
+
+    restored_outer_nodes = space.ungroup_node(outer_group.uuid)
+
+    assert {node.uuid for node in restored_outer_nodes} == {
+        inner_group.uuid,
+        double.uuid,
+    }
+    assert isinstance(space.get_node_by_id(inner_group.uuid), GroupNode)
+    assert add_one.uuid not in {node.uuid for node in space.nodes}
+    assert add_one.uuid in {node.uuid for node in inner_group.iter_inner_nodes()}
+    assert (
+        inner_group.uuid,
+        next(iter(inner_group.output_bindings.values()))["public_io"],
+        double.uuid,
+        "value",
+    ) in edge_set(space)
+
+
+def test_ungroup_node_rejects_invalid_target_without_partial_mutation():
+    space, source, add_one, double, sink = build_groupable_space()
+    before_nodes = {node.uuid for node in space.nodes}
+    before_edges = edge_set(space)
+
+    with pytest.raises(ValueError, match="not found"):
+        space.ungroup_node("missing-group")
+    with pytest.raises(ValueError, match="not a GroupNode"):
+        space.ungroup_node(add_one.uuid)
+
+    assert {node.uuid for node in space.nodes} == before_nodes
+    assert edge_set(space) == before_edges
