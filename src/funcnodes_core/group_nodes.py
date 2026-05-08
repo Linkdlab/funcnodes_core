@@ -24,7 +24,6 @@ import asyncio
 from copy import deepcopy
 from typing import Any, Iterator, Literal, TYPE_CHECKING, cast
 from typing_extensions import NotRequired, TypedDict
-from uuid import uuid4
 
 from .exceptions import InTriggerError, NodeKeyError
 from .io import (
@@ -112,6 +111,14 @@ class GroupNodePayload(TypedDict):
 GROUP_NODE_PAYLOAD_VERSION = 1
 GROUP_NODE_PROPERTY_KEY = "group"
 
+# Default frontend layout for the two structural boundary gateway nodes inside
+# a newly created executable group. The input gateway starts on the left and the
+# output gateway is placed far enough to the right that their handles do not
+# overlap in a fresh group editor view.
+DEFAULT_GROUP_INPUT_GATEWAY_FRONTEND_POS = [0, 0]
+DEFAULT_GROUP_OUTPUT_GATEWAY_FRONTEND_POS = [480, 0]
+DEFAULT_GROUP_GATEWAY_FRONTEND_SIZE = [180, 80]
+
 
 class GroupRuntimeStatus(TypedDict):
     """Runtime status payload added under `GroupNode.status()["group"]`.
@@ -170,18 +177,31 @@ def _select_kwargs(data: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any
     return {key: data[key] for key in keys if key in data}
 
 
-def _boundary_id(kind: str, kwargs: dict[str, Any]) -> str:
+def _boundary_id(
+    kind: Literal["input", "output"],
+    kwargs: dict[str, Any],
+    used_ids: set[str],
+) -> str:
     """Resolve or generate the stable boundary id from creation kwargs.
 
     The public API accepts both `id` and `uuid` because `NodeIO` itself accepts
-    both names. When neither is supplied, a private-style UUID is generated so
-    UI callers can create untyped boundaries without exposing implementation IDs.
-    The returned value is always a string and is used as the binding key as well
-    as the default public/gateway IO id.
+    both names. When neither is supplied, input boundaries receive the first
+    available `ipN` id and output boundaries receive the first available `opN`
+    id. `used_ids` must contain every public, gateway, and binding id that
+    belongs to the same direction so generated ids never collide with existing
+    group interface state. The returned value is always a string and is used as
+    the binding key as well as the default public/gateway IO id.
     """
 
-    boundary_id = kwargs.get("id", kwargs.get("uuid")) or f"_{uuid4().hex}"
-    return str(boundary_id)
+    explicit_id = kwargs.get("id", kwargs.get("uuid"))
+    if explicit_id:
+        return str(explicit_id)
+
+    prefix = "ip" if kind == "input" else "op"
+    index = 1
+    while f"{prefix}{index}" in used_ids:
+        index += 1
+    return f"{prefix}{index}"
 
 
 def _binding_from_io(
@@ -483,6 +503,7 @@ class GroupNode(Node):
         self._inner_nodespace = NodeSpace()
         self._group_input_node = GroupInputNode()
         self._group_output_node = GroupOutputNode()
+        self._apply_default_gateway_frontend_layout()
         self._inner_nodespace.add_node_instance(
             self._group_input_node,
             _allow_group_gateway=True,
@@ -495,6 +516,26 @@ class GroupNode(Node):
         self._group_output_node_uuid = self._group_output_node.uuid
         self._attach_inner_nodespace_events()
         self.on("before_trigger", self._raise_if_inner_busy_before_trigger)
+
+    def _apply_default_gateway_frontend_layout(self) -> None:
+        """Set the initial left/right editor layout for group gateway nodes."""
+
+        self._group_input_node.properties.setdefault(
+            "frontend:pos",
+            list(DEFAULT_GROUP_INPUT_GATEWAY_FRONTEND_POS),
+        )
+        self._group_input_node.properties.setdefault(
+            "frontend:size",
+            list(DEFAULT_GROUP_GATEWAY_FRONTEND_SIZE),
+        )
+        self._group_output_node.properties.setdefault(
+            "frontend:pos",
+            list(DEFAULT_GROUP_OUTPUT_GATEWAY_FRONTEND_POS),
+        )
+        self._group_output_node.properties.setdefault(
+            "frontend:size",
+            list(DEFAULT_GROUP_GATEWAY_FRONTEND_SIZE),
+        )
 
     def _attach_inner_nodespace_events(self) -> None:
         """Subscribe this group to its private nodespace event stream.
@@ -1077,7 +1118,12 @@ class GroupNode(Node):
             ValueError: If the boundary id is missing or already used.
         """
 
-        boundary_id = _boundary_id("input", kwargs)
+        used_ids = (
+            set(self._input_bindings)
+            | set(self.inputs)
+            | set(self.group_input_node.outputs)
+        )
+        boundary_id = _boundary_id("input", kwargs, used_ids)
         if boundary_id in self._input_bindings or boundary_id in self.inputs:
             raise ValueError(f"Group input '{boundary_id}' already exists")
         if boundary_id in self.group_input_node.outputs:
@@ -1166,7 +1212,12 @@ class GroupNode(Node):
             ValueError: If the boundary id is missing or already used.
         """
 
-        boundary_id = _boundary_id("output", kwargs)
+        used_ids = (
+            set(self._output_bindings)
+            | set(self.outputs)
+            | set(self.group_output_node.inputs)
+        )
+        boundary_id = _boundary_id("output", kwargs, used_ids)
         if boundary_id in self._output_bindings or boundary_id in self.outputs:
             raise ValueError(f"Group output '{boundary_id}' already exists")
         if boundary_id in self.group_output_node.inputs:
