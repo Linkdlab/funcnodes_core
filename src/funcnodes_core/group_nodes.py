@@ -483,8 +483,14 @@ class GroupNode(Node):
         self._inner_nodespace = NodeSpace()
         self._group_input_node = GroupInputNode()
         self._group_output_node = GroupOutputNode()
-        self._inner_nodespace.add_node_instance(self._group_input_node)
-        self._inner_nodespace.add_node_instance(self._group_output_node)
+        self._inner_nodespace.add_node_instance(
+            self._group_input_node,
+            _allow_group_gateway=True,
+        )
+        self._inner_nodespace.add_node_instance(
+            self._group_output_node,
+            _allow_group_gateway=True,
+        )
         self._group_input_node_uuid = self._group_input_node.uuid
         self._group_output_node_uuid = self._group_output_node.uuid
         self._attach_inner_nodespace_events()
@@ -924,7 +930,23 @@ class GroupNode(Node):
 
         inner_nodespace = NodeSpace()
         cls._register_inner_node_classes(inner_nodespace, payload)
-        inner_nodespace.deserialize(cast(Any, payload["inner_nodespace"]))
+        inner_nodespace._allow_group_gateway_nodes = True
+        try:
+            inner_nodespace.deserialize(cast(Any, payload["inner_nodespace"]))
+        finally:
+            inner_nodespace._allow_group_gateway_nodes = False
+
+        input_gateways = [
+            node for node in inner_nodespace.nodes if isinstance(node, GroupInputNode)
+        ]
+        if len(input_gateways) != 1:
+            raise ValueError("Group payload must contain exactly one GroupInputNode")
+
+        output_gateways = [
+            node for node in inner_nodespace.nodes if isinstance(node, GroupOutputNode)
+        ]
+        if len(output_gateways) != 1:
+            raise ValueError("Group payload must contain exactly one GroupOutputNode")
 
         input_gateway = inner_nodespace.get_node_by_id(payload["input_gateway_node"])
         output_gateway = inner_nodespace.get_node_by_id(payload["output_gateway_node"])
