@@ -24,6 +24,7 @@ import asyncio
 from copy import deepcopy
 from typing import Any, Iterator, Literal, TYPE_CHECKING, cast
 from typing_extensions import NotRequired, TypedDict
+from uuid import uuid4
 
 from .exceptions import InTriggerError, NodeKeyError
 from .io import (
@@ -170,16 +171,16 @@ def _select_kwargs(data: dict[str, Any], keys: tuple[str, ...]) -> dict[str, Any
 
 
 def _boundary_id(kind: str, kwargs: dict[str, Any]) -> str:
-    """Resolve and validate the stable boundary id from creation kwargs.
+    """Resolve or generate the stable boundary id from creation kwargs.
 
     The public API accepts both `id` and `uuid` because `NodeIO` itself accepts
-    both names. The returned value is always a string and is used as the binding
-    key as well as the default public/gateway IO id.
+    both names. When neither is supplied, a private-style UUID is generated so
+    UI callers can create untyped boundaries without exposing implementation IDs.
+    The returned value is always a string and is used as the binding key as well
+    as the default public/gateway IO id.
     """
 
-    boundary_id = kwargs.get("id", kwargs.get("uuid"))
-    if not boundary_id:
-        raise ValueError(f"Group {kind} id is required")
+    boundary_id = kwargs.get("id", kwargs.get("uuid")) or f"_{uuid4().hex}"
     return str(boundary_id)
 
 
@@ -237,6 +238,27 @@ class GroupInputNode(Node):
     node_name = "Group Input"
     default_trigger_on_create = False
 
+    def __init__(self, *args: Any, **kwargs: Any):
+        """Initialize a structural input gateway without trigger IO ports.
+
+        Gateway nodes are edited as group boundary surfaces. Keeping normal
+        `_triggerinput`/`_triggeroutput` ports on them exposes meaningless
+        handles in the frontend and makes boundary wiring ambiguous.
+        """
+
+        super().__init__(*args, **kwargs)
+        self._remove_default_trigger_io()
+
+    def _remove_default_trigger_io(self) -> None:
+        """Remove inherited default trigger ports from this gateway instance."""
+
+        for input_ in list(self._inputs):
+            if input_.uuid == "_triggerinput":
+                self.remove_input(input_)
+        for output in list(self._outputs):
+            if output.uuid == "_triggeroutput":
+                self.remove_output(output)
+
     async def func(self, **kwargs):
         """No-op trigger function.
 
@@ -251,9 +273,8 @@ class GroupInputNode(Node):
         """Create and attach one dynamic internal output.
 
         Args:
-            **kwargs: Standard `NodeOutput` constructor options. The caller must
-                provide an id or uuid that is unique among this gateway's
-                outputs.
+            **kwargs: Standard `NodeOutput` constructor options. The id or uuid
+                must be unique among this gateway's outputs when provided.
 
         Returns:
             The newly attached `NodeOutput`.
@@ -294,6 +315,8 @@ class GroupInputNode(Node):
         """
 
         for io_id, io_data in data.get("io", {}).items():
+            if io_id in {"_triggerinput", "_triggeroutput"}:
+                continue
             serialized = _serialized_io_with_id(io_id, io_data)
             if serialized.get("is_input"):
                 continue
@@ -305,6 +328,7 @@ class GroupInputNode(Node):
                 )
 
         super().deserialize(data)
+        self._remove_default_trigger_io()
 
 
 class GroupOutputNode(Node):
@@ -319,6 +343,27 @@ class GroupOutputNode(Node):
     node_name = "Group Output"
     default_trigger_on_create = False
 
+    def __init__(self, *args: Any, **kwargs: Any):
+        """Initialize a structural output gateway without trigger IO ports.
+
+        The output gateway only represents public group outputs as inputs inside
+        the group. Default trigger handles do not carry boundary values and
+        should not appear as editable connection points.
+        """
+
+        super().__init__(*args, **kwargs)
+        self._remove_default_trigger_io()
+
+    def _remove_default_trigger_io(self) -> None:
+        """Remove inherited default trigger ports from this gateway instance."""
+
+        for input_ in list(self._inputs):
+            if input_.uuid == "_triggerinput":
+                self.remove_input(input_)
+        for output in list(self._outputs):
+            if output.uuid == "_triggeroutput":
+                self.remove_output(output)
+
     async def func(self, **kwargs):
         """No-op trigger function.
 
@@ -332,9 +377,8 @@ class GroupOutputNode(Node):
         """Create and attach one dynamic internal input.
 
         Args:
-            **kwargs: Standard `NodeInput` constructor options. The caller must
-                provide an id or uuid that is unique among this gateway's
-                inputs.
+            **kwargs: Standard `NodeInput` constructor options. The id or uuid
+                must be unique among this gateway's inputs when provided.
 
         Returns:
             The newly attached `NodeInput`.
@@ -375,6 +419,8 @@ class GroupOutputNode(Node):
         """
 
         for io_id, io_data in data.get("io", {}).items():
+            if io_id in {"_triggerinput", "_triggeroutput"}:
+                continue
             serialized = _serialized_io_with_id(io_id, io_data)
             if not serialized.get("is_input"):
                 continue
@@ -386,6 +432,7 @@ class GroupOutputNode(Node):
                 )
 
         super().deserialize(data)
+        self._remove_default_trigger_io()
 
 
 class GroupNode(Node):
@@ -997,9 +1044,9 @@ class GroupNode(Node):
 
         Args:
             **kwargs: Standard `NodeInput` constructor options. `id` or `uuid`
-                is required and becomes the stable boundary id. Input-only
-                options such as `required`, `default`, and `does_trigger` are
-                applied only to the public input.
+                may be provided as a stable boundary id; otherwise one is
+                generated. Input-only options such as `required`, `default`,
+                and `does_trigger` are applied only to the public input.
 
         Returns:
             The newly attached public `NodeInput`.
@@ -1085,10 +1132,10 @@ class GroupNode(Node):
         - a matching `NodeInput` on the internal `GroupOutputNode`
 
         Args:
-            **kwargs: Standard boundary IO options. `id` or `uuid` is required
-                and becomes the stable boundary id. Input-only options such as
-                `required`, `default`, and `does_trigger` are applied only to the
-                internal gateway input.
+            **kwargs: Standard boundary IO options. `id` or `uuid` may be
+                provided as a stable boundary id; otherwise one is generated.
+                Input-only options such as `required`, `default`, and
+                `does_trigger` are applied only to the internal gateway input.
 
         Returns:
             The newly attached public `NodeOutput`.
