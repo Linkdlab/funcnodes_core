@@ -803,7 +803,22 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             _ = asyncio.get_running_loop()
         except RuntimeError:
             return False
-        return self.ready() and not self.in_trigger
+        return (
+            self.ready()
+            and not self.in_trigger
+            and self.additional_ready_to_trigger()
+        )
+
+    def additional_ready_to_trigger(self) -> bool:
+        """Return subclass-specific trigger readiness constraints.
+
+        `ready_to_trigger()` is protected from direct overrides so core trigger
+        scheduling remains consistent. Subclasses with extra runtime constraints
+        can override this hook instead. The default keeps existing node behavior
+        unchanged.
+        """
+
+        return True
 
     @property
     def will_trigger(self) -> bool:
