@@ -360,9 +360,10 @@ class NodeSpace(EventEmitterMixin):
     def _is_group_gateway_node(node: Node) -> bool:
         """Return whether `node` is an internal executable-group gateway."""
 
-        from .group_nodes import GroupInputNode, GroupOutputNode
-
-        return isinstance(node, (GroupInputNode, GroupOutputNode))
+        return node.node_id in {
+            "funcnodes_core.group.input",
+            "funcnodes_core.group.output",
+        }
 
     @staticmethod
     def _raise_manual_group_gateway_error() -> None:
@@ -511,9 +512,10 @@ class NodeSpace(EventEmitterMixin):
           str | None: The id of the removed node, or None if the node was not found.
         """
         try:
-            return self.remove_node_instance(self.get_node_by_id(nid))
+            node = self.get_node_by_id(nid)
         except ValueError:
-            pass
+            return None
+        return self.remove_node_instance(node)
 
     # endregion add/remove nodes
 

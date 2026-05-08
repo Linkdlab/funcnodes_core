@@ -71,6 +71,75 @@ def test_gateway_nodes_are_public_node_classes_without_auto_trigger():
     assert output_gateway.default_trigger_on_create is False
     assert input_gateway.in_trigger is False
     assert output_gateway.in_trigger is False
+    assert input_gateway.inputs == {}
+    assert input_gateway.outputs == {}
+    assert output_gateway.inputs == {}
+    assert output_gateway.outputs == {}
+
+
+def test_gateway_nodes_serialize_without_default_trigger_io():
+    """Group boundary gateways should not expose normal trigger ports."""
+
+    input_gateway = GroupInputNode()
+    output_gateway = GroupOutputNode()
+
+    assert input_gateway.serialize(drop=False)["io"] == {}
+    assert output_gateway.serialize(drop=False)["io"] == {}
+    assert input_gateway.full_serialize()["io"] == []
+    assert output_gateway.full_serialize()["io"] == []
+
+
+def test_gateway_nodes_ignore_legacy_serialized_trigger_io():
+    """Old gateway snapshots with trigger IO should not restore those ports."""
+
+    input_gateway = GroupInputNode()
+    output_gateway = GroupOutputNode()
+
+    input_gateway.deserialize(
+        {
+            "name": "Legacy Input Gateway",
+            "id": "input-gateway",
+            "node_id": "funcnodes_core.group.input",
+            "node_name": "Group Input",
+            "io": {
+                "_triggerinput": {
+                    "is_input": True,
+                    "name": "( )",
+                    "hidden": True,
+                },
+                "_triggeroutput": {
+                    "is_input": False,
+                    "name": "➡",
+                    "hidden": True,
+                },
+            },
+        }
+    )
+    output_gateway.deserialize(
+        {
+            "name": "Legacy Output Gateway",
+            "id": "output-gateway",
+            "node_id": "funcnodes_core.group.output",
+            "node_name": "Group Output",
+            "io": {
+                "_triggerinput": {
+                    "is_input": True,
+                    "name": "( )",
+                    "hidden": True,
+                },
+                "_triggeroutput": {
+                    "is_input": False,
+                    "name": "➡",
+                    "hidden": True,
+                },
+            },
+        }
+    )
+
+    assert input_gateway.inputs == {}
+    assert input_gateway.outputs == {}
+    assert output_gateway.inputs == {}
+    assert output_gateway.outputs == {}
 
 
 def test_group_input_node_adds_and_removes_dynamic_outputs():
@@ -173,6 +242,11 @@ def test_gateway_nodes_roundtrip_dynamic_io_serialization():
     input_serialized = input_gateway.serialize(drop=False)
     output_serialized = output_gateway.serialize(drop=False)
 
+    assert "_triggerinput" not in input_serialized["io"]
+    assert "_triggeroutput" not in input_serialized["io"]
+    assert "_triggerinput" not in output_serialized["io"]
+    assert "_triggeroutput" not in output_serialized["io"]
+
     restored_input_gateway = GroupInputNode()
     restored_output_gateway = GroupOutputNode()
     restored_input_gateway.deserialize(input_serialized)
@@ -207,6 +281,80 @@ def test_group_node_is_node_with_internal_gateway_nodes():
     assert group.group_output_node is group.inner_nodespace.get_node_by_id(
         group.group_output_node_uuid
     )
+    assert sum(isinstance(node, GroupInputNode) for node in group.inner_nodespace.nodes) == 1
+    assert (
+        sum(isinstance(node, GroupOutputNode) for node in group.inner_nodespace.nodes)
+        == 1
+    )
+
+
+def test_group_node_gateways_have_spaced_default_frontend_positions():
+    """New groups should open with boundary gateways separated in the editor."""
+
+    group = GroupNode()
+
+    assert group.group_input_node.properties["frontend:pos"] == [0, 0]
+    assert group.group_output_node.properties["frontend:pos"] == [480, 0]
+    assert group.group_input_node.properties["frontend:size"] == [180, 80]
+    assert group.group_output_node.properties["frontend:size"] == [180, 80]
+
+    payload_nodes = {
+        node["id"]: node
+        for node in group.serialize()["properties"]["group"]["inner_nodespace"][
+            "nodes"
+        ]
+    }
+    assert payload_nodes[group.group_input_node_uuid]["properties"][
+        "frontend:pos"
+    ] == [0, 0]
+    assert payload_nodes[group.group_output_node_uuid]["properties"][
+        "frontend:pos"
+    ] == [480, 0]
+
+
+def test_gateway_nodes_cannot_be_manually_added_to_nodespaces():
+    """Gateway implementation nodes are owned exclusively by GroupNode."""
+
+    space = NodeSpace()
+    group = GroupNode()
+
+    with pytest.raises(ValueError, match="managed by GroupNode"):
+        space.add_node_instance(GroupInputNode())
+    with pytest.raises(ValueError, match="managed by GroupNode"):
+        space.add_node_instance(GroupOutputNode())
+    with pytest.raises(ValueError, match="managed by GroupNode"):
+        group.inner_nodespace.add_node_instance(GroupInputNode())
+
+
+def test_group_gateway_nodes_cannot_be_manually_removed_from_group():
+    """Manual gateway removal would break the one-input/one-output invariant."""
+
+    group = GroupNode()
+
+    with pytest.raises(ValueError, match="managed by GroupNode"):
+        group.inner_nodespace.remove_node_instance(group.group_input_node)
+    with pytest.raises(ValueError, match="managed by GroupNode"):
+        group.inner_nodespace.remove_node_instance(group.group_output_node)
+
+
+def test_group_node_deserialization_rejects_duplicate_gateway_nodes():
+    """Group payloads must contain exactly one input and one output gateway."""
+
+    group = GroupNode()
+    serialized = group.serialize()
+    payload = serialized["properties"]["group"]
+    payload["inner_nodespace"]["nodes"].append(
+        {
+            "name": "Duplicate Group Input",
+            "id": "duplicate-input-gateway",
+            "node_id": "funcnodes_core.group.input",
+            "node_name": "Group Input",
+            "io": {},
+        }
+    )
+
+    with pytest.raises(ValueError, match="exactly one GroupInputNode"):
+        GroupNode().deserialize(serialized)
 
 
 def test_group_node_starts_with_only_normal_hidden_trigger_io():
@@ -272,6 +420,44 @@ def test_group_node_add_group_input_creates_public_input_gateway_output_and_bind
     assert binding["gateway_io"] == "threshold"
 
 
+def test_group_node_add_group_input_auto_generates_untyped_boundary():
+    """Group inputs without explicit IDs should use numbered untyped IO IDs."""
+
+    group = GroupNode()
+
+    public_input = group.add_group_input(name="Value")
+
+    boundary_id = public_input.uuid
+    gateway_output = group.group_input_node.outputs[boundary_id]
+    binding = group.input_bindings[boundary_id]
+
+    assert boundary_id == "ip1"
+    assert public_input is group.inputs[boundary_id]
+    assert gateway_output.uuid == boundary_id
+    assert public_input.name == "Value"
+    assert gateway_output.name == "Value"
+    assert public_input.serialize()["type"] == "Any"
+    assert gateway_output.serialize()["type"] == "Any"
+    assert binding["id"] == boundary_id
+    assert binding["public_io"] == boundary_id
+    assert binding["gateway_io"] == boundary_id
+
+
+def test_group_node_add_group_input_auto_id_skips_existing_conflicts():
+    """Generated group input IDs should advance until no IO conflict exists."""
+
+    group = GroupNode()
+    group.add_group_input(id="ip1", name="First")
+    group.add_group_input(id="ip2", name="Second")
+
+    public_input = group.add_group_input(name="Next")
+
+    assert public_input.uuid == "ip3"
+    assert "ip3" in group.inputs
+    assert "ip3" in group.group_input_node.outputs
+    assert "ip3" in group.input_bindings
+
+
 def test_group_node_add_group_output_creates_public_output_gateway_input_and_binding():
     group = GroupNode()
 
@@ -300,6 +486,44 @@ def test_group_node_add_group_output_creates_public_output_gateway_input_and_bin
     assert binding["public_io"] == "result"
     assert binding["gateway_node"] == group.group_output_node_uuid
     assert binding["gateway_io"] == "result"
+
+
+def test_group_node_add_group_output_auto_generates_untyped_boundary():
+    """Group outputs without explicit IDs should use numbered untyped IO IDs."""
+
+    group = GroupNode()
+
+    public_output = group.add_group_output(name="Result")
+
+    boundary_id = public_output.uuid
+    gateway_input = group.group_output_node.inputs[boundary_id]
+    binding = group.output_bindings[boundary_id]
+
+    assert boundary_id == "op1"
+    assert public_output is group.outputs[boundary_id]
+    assert gateway_input.uuid == boundary_id
+    assert public_output.name == "Result"
+    assert gateway_input.name == "Result"
+    assert public_output.serialize()["type"] == "Any"
+    assert gateway_input.serialize()["type"] == "Any"
+    assert binding["id"] == boundary_id
+    assert binding["public_io"] == boundary_id
+    assert binding["gateway_io"] == boundary_id
+
+
+def test_group_node_add_group_output_auto_id_skips_existing_conflicts():
+    """Generated group output IDs should advance until no IO conflict exists."""
+
+    group = GroupNode()
+    group.add_group_output(id="op1", name="First")
+    group.add_group_output(id="op2", name="Second")
+
+    public_output = group.add_group_output(name="Next")
+
+    assert public_output.uuid == "op3"
+    assert "op3" in group.outputs
+    assert "op3" in group.group_output_node.inputs
+    assert "op3" in group.output_bindings
 
 
 def test_group_node_remove_group_input_disconnects_public_and_gateway_io():
