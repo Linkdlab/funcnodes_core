@@ -288,6 +288,55 @@ def test_group_node_is_node_with_internal_gateway_nodes():
     )
 
 
+def test_group_node_inner_nodespace_shares_parent_library():
+    """Group internals should use the same runtime library as their parent."""
+
+    space = NodeSpace()
+    space.lib.add_node(GatewaySinkNode, "tests")
+    group = GroupNode(uuid="group-node")
+
+    space.add_node_instance(group)
+    created = group.inner_nodespace.add_node_by_id(
+        "test_group_nodes_sink",
+        uuid="inner-sink",
+    )
+
+    assert group.inner_nodespace.lib is space.lib
+    assert created is group.inner_nodespace.get_node_by_id("inner-sink")
+
+
+def test_nested_group_nodespaces_share_parent_library_recursively():
+    """Nested executable groups should inherit one shared runtime library."""
+
+    space = NodeSpace()
+    space.lib.add_node(GatewaySinkNode, "tests")
+    outer = GroupNode(uuid="outer-group")
+    nested = GroupNode(uuid="nested-group")
+    outer.inner_nodespace.add_node_instance(nested)
+
+    space.add_node_instance(outer)
+
+    assert outer.inner_nodespace.lib is space.lib
+    assert nested.inner_nodespace.lib is space.lib
+    assert nested.inner_nodespace.add_node_by_id(
+        "test_group_nodes_sink",
+        uuid="nested-sink",
+    ).uuid == "nested-sink"
+
+
+def test_group_node_serialization_does_not_store_inner_library():
+    """Group payloads should keep shared libraries as runtime-only state."""
+
+    space = NodeSpace()
+    space.lib.add_node(GatewaySinkNode, "tests")
+    group = GroupNode(uuid="group-node")
+    space.add_node_instance(group)
+
+    payload = group.serialize()["properties"]["group"]
+
+    assert "lib" not in payload["inner_nodespace"]
+
+
 def test_group_node_gateways_have_spaced_default_frontend_positions():
     """New groups should open with boundary gateways separated in the editor."""
 
