@@ -12,6 +12,7 @@ from .node import (
     NodeTriggerError,
     Node,
     run_until_complete,
+    register_node,
 )  #
 from .io import NodeInput, NodeOutput
 
@@ -80,9 +81,27 @@ class NodeSpace(EventEmitterMixin):
         self.groups = GroupingLogic()
         self._allow_group_gateway_nodes = False
         self.lib = Library()
+        self._register_builtin_group_nodes()
         if id is None:
             id = uuid4().hex
         self._id = id
+
+    def _register_builtin_group_nodes(self) -> None:
+        """Register built-in executable group classes for this nodespace.
+
+        `GroupNode` is part of core graph behavior, so every plain `NodeSpace`
+        must be able to deserialize it without worker-specific setup. Gateway
+        classes are registered globally so group payloads can restore them, but
+        they are intentionally not added to the visible library because users
+        must not add gateway implementation nodes manually.
+        """
+
+        from .group_nodes import GroupInputNode, GroupNode, GroupOutputNode
+
+        register_node(GroupNode)
+        register_node(GroupInputNode)
+        register_node(GroupOutputNode)
+        self.lib.add_node(GroupNode, "groups")
 
     def set_library(self, library: Library) -> Library:
         """Set the live node library and propagate it into nested groups.
