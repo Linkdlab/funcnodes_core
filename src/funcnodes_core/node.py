@@ -1037,7 +1037,8 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
                     if self._rolling_tigger_time is None
                     else (0.9 * self._rolling_tigger_time + 0.1 * _trigger_time)
                 )
-                self.outputs["_triggeroutput"].set_value(time.time())
+                if "_triggeroutput" in self.outputs:
+                    self.outputs["_triggeroutput"].set_value(time.time())
                 if pbar is not None:
                     pbar.set_description_str("idle", refresh=False)
             except Exception as e:

@@ -84,6 +84,35 @@ class NodeSpace(EventEmitterMixin):
             id = uuid4().hex
         self._id = id
 
+    def set_library(self, library: Library) -> Library:
+        """Set the live node library and propagate it into nested groups.
+
+        `NodeSpace` serialization keeps graph data separate from runtime library
+        state. Workers can therefore attach one shared library to the root
+        nodespace and every executable group nodespace after construction or
+        deserialization without duplicating library data in saved flows.
+
+        Args:
+          library: The `Library` instance to use for this nodespace and all
+            existing executable group descendants.
+
+        Returns:
+          Library: The library now attached to this nodespace.
+        """
+
+        self.lib = library
+        for node in self.nodes:
+            self._share_library_with_group_node(node)
+        return self.lib
+
+    def _share_library_with_group_node(self, node: Node) -> None:
+        """Attach this nodespace's library to `node` when it is a group."""
+
+        from .group_nodes import GroupNode
+
+        if isinstance(node, GroupNode):
+            node.inner_nodespace.set_library(self.lib)
+
     # region Properties
     @property
     def id(self) -> str:
@@ -388,6 +417,7 @@ class NodeSpace(EventEmitterMixin):
             raise ValueError(f"node with uuid '{node.uuid}' already exists")
         self._nodes[node.uuid] = node
         node.nodespace = self
+        self._share_library_with_group_node(node)
         node.on("*", self.on_node_event)
         node.on_error(self.on_node_error)
         node_ser = node.full_serialize(with_io_values=False)
