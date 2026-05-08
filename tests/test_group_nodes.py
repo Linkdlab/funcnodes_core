@@ -337,6 +337,16 @@ def test_group_node_serialization_does_not_store_inner_library():
     assert "lib" not in payload["inner_nodespace"]
 
 
+def test_nodespace_default_library_exposes_group_but_hides_gateways():
+    """Core nodespaces should resolve groups while keeping gateways internal."""
+
+    space = NodeSpace()
+
+    assert space.lib.has_node_id("funcnodes_core.group")
+    assert not space.lib.has_node_id("funcnodes_core.group.input")
+    assert not space.lib.has_node_id("funcnodes_core.group.output")
+
+
 def test_group_node_gateways_have_spaced_default_frontend_positions():
     """New groups should open with boundary gateways separated in the editor."""
 
@@ -1146,6 +1156,8 @@ def test_group_node_rejects_unsupported_group_payload_version():
 
 
 async def test_nodespace_roundtrips_group_node_with_internal_graph():
+    """NodeSpace should restore saved GroupNode graphs without caller setup."""
+
     group = GroupNode()
     group.add_group_input(id="value", type=int, does_trigger=False)
     group.add_group_output(id="result", type=int, required=False, does_trigger=False)
@@ -1154,13 +1166,11 @@ async def test_nodespace_roundtrips_group_node_with_internal_graph():
     group.group_input_node.outputs["value"].connect(slow.inputs["value"])
     slow.outputs["result"].connect(group.group_output_node.inputs["result"])
     space = NodeSpace()
-    space.lib.add_node(GroupNode, "groups")
     space.add_node_instance(group)
 
     serialized = space.serialize()
 
     restored_space = NodeSpace()
-    restored_space.lib.add_node(GroupNode, "groups")
     restored_space.deserialize(serialized)
     restored_group = restored_space.get_node_by_id(group.uuid)
 
