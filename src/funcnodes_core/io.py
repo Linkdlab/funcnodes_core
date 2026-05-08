@@ -991,7 +991,7 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
         if "required" in data:
             self.required = data["required"]
         if "does_trigger" in data:
-            self._does_trigger = data["does_trigger"]
+            self.does_trigger = data["does_trigger"]
         if "default" in data:
             self._default = data["default"]
             self._value = self._default
@@ -1087,6 +1087,21 @@ class NodeInput(NodeIO, Generic[NodeIOType]):
             Defaults to True if not explicitly set.
         """
         return self._does_trigger
+
+    @does_trigger.setter
+    def does_trigger(self, value: bool) -> None:
+        """
+        Updates whether setting this input should request a node trigger.
+
+        Args:
+            value: Boolean trigger flag to apply to future value changes.
+
+        Raises:
+            TypeError: If ``value`` is not a boolean.
+        """
+        if not isinstance(value, bool):
+            raise TypeError("does_trigger must be a boolean value")
+        self._does_trigger = value
 
     def trigger(self, triggerstack: Optional[TriggerStack] = None) -> TriggerStack:
         if triggerstack is None:

@@ -303,6 +303,44 @@ async def test_output_set_value_triggers_target_when_target_allows_triggering():
 
 
 @funcnodes_test
+async def test_input_does_trigger_setter_updates_runtime_trigger_behavior():
+    """Changing an input's does_trigger flag should affect later value changes."""
+
+    SourceNode = make_counter_node("setter_source_node_trigger_test")
+    TargetNode = make_counter_node("setter_target_node_trigger_test")
+
+    node_a = SourceNode()
+    node_b = TargetNode()
+    node_a.outputs["output"].connect(node_b.inputs["value"])
+
+    node_b.inputs["value"].does_trigger = False
+    node_a.outputs["output"].set_value(42)
+    await fn.run_until_complete(node_a, node_b)
+
+    assert node_b.inputs["value"].value == 42
+    assert node_b.call_count == 0
+    assert node_b.outputs["output"].value is fn.NoValue
+
+    node_b.inputs["value"].does_trigger = True
+    node_a.outputs["output"].set_value(43)
+    await fn.run_until_complete(node_a, node_b)
+
+    assert node_b.inputs["value"].value == 43
+    assert node_b.call_count == 1
+    assert node_b.outputs["output"].value == 43
+
+
+@funcnodes_test
+def test_input_does_trigger_setter_rejects_non_boolean_values():
+    """Only boolean values should be accepted by the does_trigger setter."""
+
+    test_input = NodeInput(id="value")
+
+    with pytest.raises(TypeError, match="does_trigger"):
+        test_input.does_trigger = "false"  # type: ignore[assignment]
+
+
+@funcnodes_test
 def test_nodeclass_string():
     test_node = DummyNode(uuid="test_uuid")
     assert str(test_node) == "DummyNode(test_uuid)"
