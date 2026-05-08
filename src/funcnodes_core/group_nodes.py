@@ -33,7 +33,7 @@ from .io import (
     NodeOutput,
     NodeOutputSerialization,
 )
-from .node import FullNodeJSON, Node, NodeJSON, get_nodeclass
+from .node import FullNodeJSON, Node, NodeJSON, NodeTriggerError, get_nodeclass
 from .eventmanager import MessageInArgs
 
 if TYPE_CHECKING:
@@ -210,15 +210,17 @@ def _binding_from_io(
     )
     for key in (
         "description",
-        "required",
-        "default",
         "allow_multiple",
-        "does_trigger",
         "render_options",
         "value_options",
     ):
         if key in serialized:
             binding[key] = serialized[key]  # type: ignore[literal-required]
+    input_metadata_source = public_io if direction == "input" else gateway_io
+    input_metadata = input_metadata_source.serialize(drop=False)
+    for key in ("required", "default", "does_trigger"):
+        if key in input_metadata:
+            binding[key] = input_metadata[key]  # type: ignore[literal-required]
     return binding
 
 
@@ -429,6 +431,8 @@ class GroupNode(Node):
 
         self._input_bindings: dict[str, GroupInterfaceBinding] = {}
         self._output_bindings: dict[str, GroupInterfaceBinding] = {}
+        self._inner_trigger_errors: list[Exception] = []
+        self._queued_trigger_task: asyncio.Task | None = None
         self._inner_nodespace = NodeSpace()
         self._group_input_node = GroupInputNode()
         self._group_output_node = GroupOutputNode()
@@ -476,6 +480,10 @@ class GroupNode(Node):
         payload["inner_event"] = event
         self.emit(f"inner_{event}", MessageInArgs(src=self, **payload))
         self.emit("inner_event", MessageInArgs(src=self, **payload))
+        if event == "node_trigger_error" and "error" in payload:
+            self._inner_trigger_errors.append(payload["error"])
+        if event in {"triggerdone", "node_trigger_error"}:
+            self._schedule_queued_trigger()
 
     @property
     def inner_nodespace(self) -> "NodeSpace":
@@ -611,6 +619,96 @@ class GroupNode(Node):
                 binding=deepcopy(binding),
             ),
         )
+
+    @staticmethod
+    def _ensure_boundary_id_is_stable(
+        boundary_id: str, kwargs: dict[str, Any]
+    ) -> None:
+        """Reject update calls that try to change a stable boundary id.
+
+        Boundary ids are durable mapping keys and serialized public/gateway IO
+        ids. Renaming a boundary therefore means updating its display metadata,
+        not changing the id used by existing edges and bindings.
+
+        Args:
+            boundary_id: Existing stable boundary id being updated.
+            kwargs: Update keyword arguments supplied by the caller.
+
+        Raises:
+            ValueError: If ``id`` or ``uuid`` is present and differs from
+                ``boundary_id``.
+        """
+
+        for key in ("id", "uuid"):
+            if key in kwargs and str(kwargs[key]) != boundary_id:
+                raise ValueError("Boundary id cannot be changed")
+
+    @staticmethod
+    def _apply_common_io_update(
+        target: NodeInput | NodeOutput, template: NodeInput | NodeOutput
+    ) -> None:
+        """Copy mutable common IO metadata from a template onto live IO.
+
+        The live IO object is kept in place so existing edges remain connected.
+        A temporary IO instance is used to validate constructor-compatible
+        metadata such as serialized type, render options, and value options
+        before this method updates protected storage on the existing object.
+        """
+
+        target.name = template.name
+        target._description = template.serialize(drop=False).get("description")
+        target._sertype = template.serialize(drop=False)["type"]
+        target._allow_multiple = template._allow_multiple
+        target._default_render_options = template.render_options
+        target._default_value_options = template._default_value_options
+        target._value_options = template._value_options
+        target.hidden = template.hidden
+        target._emit_value_set = template._emit_value_set
+
+    @staticmethod
+    def _apply_input_only_update(target: NodeInput, template: NodeInput) -> None:
+        """Copy mutable input-only metadata from a template onto live input IO."""
+
+        target.required = template.required
+        target._does_trigger = template.does_trigger
+        target._default = template.default
+        if target.value is NoValue:
+            target._value = template.default
+
+    def _update_binding_from_live_io(
+        self,
+        *,
+        boundary_id: str,
+        direction: Literal["input", "output"],
+        public_io: NodeInput | NodeOutput,
+        gateway_node: Node,
+        gateway_io: NodeInput | NodeOutput,
+    ) -> GroupInterfaceBinding:
+        """Refresh one stored binding from the current public/gateway IO state.
+
+        Args:
+            boundary_id: Stable boundary id to update.
+            direction: Boundary direction.
+            public_io: Current public IO on the outer group node.
+            gateway_node: Internal gateway node for the boundary.
+            gateway_io: Current gateway IO matching ``public_io``.
+
+        Returns:
+            The refreshed binding stored in the matching binding table.
+        """
+
+        binding = _binding_from_io(
+            boundary_id=boundary_id,
+            direction=direction,
+            public_io=public_io,
+            gateway_node=gateway_node,
+            gateway_io=gateway_io,
+        )
+        if direction == "input":
+            self._input_bindings[boundary_id] = binding
+        else:
+            self._output_bindings[boundary_id] = binding
+        return binding
 
     def serialize_group_payload(self) -> GroupNodePayload:
         """Serialize the internal group graph and boundary binding table.
@@ -1067,6 +1165,130 @@ class GroupNode(Node):
         )
         return public_output, gateway_input
 
+    def update_group_input(self, boundary_id: str, **kwargs: Any) -> NodeInput:
+        """Update display and metadata for one public input boundary.
+
+        The stable boundary id cannot change because it anchors serialized
+        bindings and existing edges. Mutable IO metadata is applied to both the
+        public `GroupNode` input and the matching `GroupInputNode` output, while
+        input-only options such as ``required`` and ``does_trigger`` apply only
+        to the public input.
+
+        Args:
+            boundary_id: Stable id of the input boundary to update.
+            **kwargs: Standard `NodeInput` constructor-style metadata. ``id``
+                or ``uuid`` may be repeated only if it matches ``boundary_id``.
+
+        Returns:
+            The updated public `NodeInput`.
+
+        Raises:
+            ValueError: If the boundary is missing or the update attempts to
+                change its stable id.
+        """
+
+        if boundary_id not in self._input_bindings:
+            raise ValueError(f"Group input '{boundary_id}' not found")
+        self._ensure_boundary_id_is_stable(boundary_id, kwargs)
+
+        binding = self._input_bindings[boundary_id]
+        public_input = self.get_input(binding["public_io"])
+        gateway_output = self.group_input_node.get_output(binding["gateway_io"])
+
+        input_kwargs = {
+            **public_input.serialize(drop=False),
+            **kwargs,
+            "id": public_input.uuid,
+        }
+        gateway_kwargs = {
+            **gateway_output.serialize(drop=False),
+            **_select_kwargs(kwargs, _COMMON_IO_KEYS),
+            "id": gateway_output.uuid,
+        }
+        public_template = NodeInput(**input_kwargs)
+        gateway_template = NodeOutput(**gateway_kwargs)
+
+        self._apply_common_io_update(public_input, public_template)
+        self._apply_input_only_update(public_input, public_template)
+        self._apply_common_io_update(gateway_output, gateway_template)
+
+        refreshed_binding = self._update_binding_from_live_io(
+            boundary_id=boundary_id,
+            direction="input",
+            public_io=public_input,
+            gateway_node=self.group_input_node,
+            gateway_io=gateway_output,
+        )
+        self._emit_boundary_io_event(
+            event="io_updated",
+            direction="input",
+            boundary_id=boundary_id,
+            binding=refreshed_binding,
+        )
+        return public_input
+
+    def update_group_output(self, boundary_id: str, **kwargs: Any) -> NodeOutput:
+        """Update display and metadata for one public output boundary.
+
+        The public `GroupNode` output and internal `GroupOutputNode` input keep
+        their existing object identities and connections. Common IO metadata is
+        mirrored to both sides. Input-only options such as ``required`` and
+        ``does_trigger`` apply to the internal gateway input because that input
+        is the triggerable side of an output boundary.
+
+        Args:
+            boundary_id: Stable id of the output boundary to update.
+            **kwargs: Standard boundary IO metadata. ``id`` or ``uuid`` may be
+                repeated only if it matches ``boundary_id``.
+
+        Returns:
+            The updated public `NodeOutput`.
+
+        Raises:
+            ValueError: If the boundary is missing or the update attempts to
+                change its stable id.
+        """
+
+        if boundary_id not in self._output_bindings:
+            raise ValueError(f"Group output '{boundary_id}' not found")
+        self._ensure_boundary_id_is_stable(boundary_id, kwargs)
+
+        binding = self._output_bindings[boundary_id]
+        public_output = self.get_output(binding["public_io"])
+        gateway_input = self.group_output_node.get_input(binding["gateway_io"])
+
+        public_kwargs = {
+            **public_output.serialize(drop=False),
+            **_select_kwargs(kwargs, _COMMON_IO_KEYS),
+            "id": public_output.uuid,
+        }
+        gateway_kwargs = {
+            **gateway_input.serialize(drop=False),
+            **kwargs,
+            "id": gateway_input.uuid,
+        }
+        public_template = NodeOutput(**public_kwargs)
+        gateway_template = NodeInput(**gateway_kwargs)
+
+        self._apply_common_io_update(public_output, public_template)
+        self._apply_common_io_update(gateway_input, gateway_template)
+        self._apply_input_only_update(gateway_input, gateway_template)
+
+        refreshed_binding = self._update_binding_from_live_io(
+            boundary_id=boundary_id,
+            direction="output",
+            public_io=public_output,
+            gateway_node=self.group_output_node,
+            gateway_io=gateway_input,
+        )
+        self._emit_boundary_io_event(
+            event="io_updated",
+            direction="output",
+            boundary_id=boundary_id,
+            binding=refreshed_binding,
+        )
+        return public_output
+
     def _inner_trigger_nodes(self) -> list[Node]:
         """Return all nodes that participate in the internal trigger barrier.
 
@@ -1091,6 +1313,124 @@ class GroupNode(Node):
             if node.in_trigger or node.will_trigger:
                 return False
         return True
+
+    def additional_ready_to_trigger(self) -> bool:
+        """Return whether group-specific trigger constraints are satisfied.
+
+        The base `Node.ready_to_trigger()` already checks normal input readiness
+        and the outer node trigger state. This hook adds the group contract: a
+        group is ready only when every internal node, including nested groups
+        and gateway nodes, is idle and has no immediately runnable queued
+        trigger request.
+        """
+
+        return self._inner_idle()
+
+    async def _trigger_queued_when_ready(self) -> None:
+        """Trigger a queued group request once the group becomes ready.
+
+        `Node.request_trigger()` can queue a request while the group is waiting
+        on inner work. This helper is scheduled from request and inner event
+        paths so that the queued request starts after the internal graph becomes
+        idle, but never concurrently with active group or inner execution.
+        """
+
+        try:
+            for _ in range(self.default_inner_trigger_settle_limit):
+                if not self._requests_trigger:
+                    return
+                if self.ready_to_trigger():
+                    self.trigger()
+                    return
+                running_tasks = [
+                    task
+                    for node in self._inner_trigger_nodes()
+                    if (task := getattr(node, "_trigger_task", None)) is not None
+                    and not task.done()
+                ]
+                if running_tasks:
+                    await asyncio.gather(
+                        *(asyncio.shield(task) for task in running_tasks),
+                        return_exceptions=True,
+                    )
+                else:
+                    await asyncio.sleep(0)
+        finally:
+            self._queued_trigger_task = None
+
+    def _schedule_queued_trigger(self) -> None:
+        """Ensure a background task exists for a queued group trigger request.
+
+        The scheduler is intentionally local to `GroupNode`; it does not alter
+        global `NodeSpace` behavior. If no event loop is running or no request is
+        queued, the method is a no-op.
+        """
+
+        if not self._requests_trigger:
+            return
+        if self._queued_trigger_task is not None and not self._queued_trigger_task.done():
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._queued_trigger_task = loop.create_task(self._trigger_queued_when_ready())
+
+    def request_trigger(self):
+        """Request a group trigger without starting while inner work is busy.
+
+        The base implementation is still responsible for normal node semantics.
+        After delegating to it, this override schedules queued group requests so
+        they can start automatically once active inner nodes have finished.
+        """
+
+        super().request_trigger()
+        self._schedule_queued_trigger()
+
+    @staticmethod
+    def _is_source_like_inner_node(node: Node) -> bool:
+        """Return whether an inner node should start from a group trigger alone.
+
+        Nodes with no public data inputs behave like sources in the private
+        graph. They cannot be triggered by input propagation, so the group starts
+        them explicitly when it runs.
+        """
+
+        return all(input_.uuid == "_triggerinput" for input_ in node.inputs.values())
+
+    def _trigger_ready_inner_nodes_once(self) -> None:
+        """Start source-like and nested inner nodes once for this trigger.
+
+        Value propagation usually requests downstream internal triggers through
+        normal input semantics. This method starts ready internal source nodes
+        and nested groups that otherwise may not receive such a request, without
+        re-running ordinary downstream nodes whose inputs already triggered them.
+        """
+
+        for node in self._inner_trigger_nodes():
+            if isinstance(node, (GroupInputNode, GroupOutputNode)):
+                continue
+            should_start = isinstance(node, GroupNode) or self._is_source_like_inner_node(
+                node
+            )
+            if should_start and node.ready_to_trigger():
+                node.trigger()
+
+    def _raise_inner_trigger_errors(self) -> None:
+        """Raise the first captured inner trigger error on the outer group.
+
+        Inner nodes report trigger failures through their private `NodeSpace`.
+        Promoting the first captured error from `GroupNode.func()` lets the base
+        node trigger machinery emit a normal `NodeTriggerError` on the outer
+        group as well.
+        """
+
+        if not self._inner_trigger_errors:
+            return
+        error = self._inner_trigger_errors[0]
+        if isinstance(error, NodeTriggerError):
+            raise error
+        raise NodeTriggerError.from_error(error)
 
     async def _await_inner_quiescence(self) -> None:
         """Wait until the internal nodespace has no active or ready work.
@@ -1122,8 +1462,10 @@ class GroupNode(Node):
             ]
             if running_tasks:
                 await asyncio.gather(*running_tasks)
+                self._raise_inner_trigger_errors()
                 continue
 
+            self._raise_inner_trigger_errors()
             if self._inner_idle():
                 return
 
@@ -1220,7 +1562,9 @@ class GroupNode(Node):
         outputs after the internal graph has reached quiescence.
         """
 
+        self._inner_trigger_errors = []
         self._copy_public_inputs_to_gateway_outputs()
+        self._trigger_ready_inner_nodes_once()
         await self._await_inner_quiescence()
         self._copy_gateway_inputs_to_public_outputs()
         return None

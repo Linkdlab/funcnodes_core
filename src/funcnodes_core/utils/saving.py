@@ -19,6 +19,14 @@ def serialize_nodeio_for_saving(io: NodeIO):
 
 
 def serialize_node_for_saving(node: Node):
+    """Serialize one node for persistent worker state.
+
+    The base serializer keeps save files compact by removing redundant IO and
+    default metadata. Executable group nodes still need their private graph
+    payload, which lives outside ordinary user properties, so it is reattached
+    when the node exposes a `serialize_group_payload` method.
+    """
+
     ser = NodeJSON(
         name=node.name,
         id=node.uuid,
@@ -76,6 +84,12 @@ def serialize_node_for_saving(node: Node):
 
     properties = node.properties
     if properties:
+        ser["properties"] = properties
+
+    group_payload_serializer = getattr(node, "serialize_group_payload", None)
+    if callable(group_payload_serializer):
+        properties = dict(ser.get("properties", {}))
+        properties["group"] = group_payload_serializer()
         ser["properties"] = properties
 
     return ser

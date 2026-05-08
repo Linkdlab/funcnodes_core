@@ -11,6 +11,7 @@ from funcnodes_core import (
     NodeOutput,
     NodeSpace,
     NoValue,
+    NodeTriggerError,
 )
 from funcnodes_core.exceptions import InTriggerError
 
@@ -376,6 +377,115 @@ def test_group_node_remove_missing_boundary_ids_raises_clear_error():
         group.remove_group_output("missing")
 
 
+def test_group_node_update_group_input_updates_public_gateway_and_binding_metadata():
+    group = GroupNode()
+    public_input = group.add_group_input(
+        id="value",
+        name="Value",
+        type=int,
+        required=True,
+        default=1,
+        does_trigger=True,
+    )
+    gateway_output = group.group_input_node.outputs["value"]
+
+    updated = group.update_group_input(
+        "value",
+        name="Renamed Value",
+        description="A renamed input boundary",
+        type=float,
+        required=False,
+        default=2.5,
+        does_trigger=False,
+        hidden=True,
+        emit_value_set=False,
+        render_options={"color": "red"},
+    )
+
+    assert updated is public_input
+    assert public_input.name == "Renamed Value"
+    assert public_input.required is False
+    assert public_input.default == 2.5
+    assert public_input.does_trigger is False
+    assert public_input.hidden is True
+    assert public_input.serialize(drop=False)["type"] == "float"
+    assert public_input.serialize(drop=False)["description"] == (
+        "A renamed input boundary"
+    )
+    assert public_input.render_options == {"color": "red"}
+    assert gateway_output.name == "Renamed Value"
+    assert gateway_output.hidden is True
+    assert gateway_output.serialize(drop=False)["type"] == "float"
+    assert gateway_output.serialize(drop=False)["description"] == (
+        "A renamed input boundary"
+    )
+    assert group.input_bindings["value"]["name"] == "Renamed Value"
+    assert group.input_bindings["value"]["type"] == "float"
+    assert group.input_bindings["value"]["required"] is False
+    assert group.input_bindings["value"]["default"] == 2.5
+    assert group.input_bindings["value"]["does_trigger"] is False
+
+
+def test_group_node_update_group_output_updates_public_gateway_and_binding_metadata():
+    group = GroupNode()
+    public_output = group.add_group_output(
+        id="result",
+        name="Result",
+        type=int,
+        required=True,
+        does_trigger=True,
+    )
+    gateway_input = group.group_output_node.inputs["result"]
+
+    updated = group.update_group_output(
+        "result",
+        name="Renamed Result",
+        description="A renamed output boundary",
+        type=float,
+        required=False,
+        does_trigger=False,
+        hidden=True,
+        render_options={"color": "green"},
+    )
+
+    assert updated is public_output
+    assert public_output.name == "Renamed Result"
+    assert public_output.hidden is True
+    assert public_output.serialize(drop=False)["type"] == "float"
+    assert public_output.serialize(drop=False)["description"] == (
+        "A renamed output boundary"
+    )
+    assert public_output.render_options == {"color": "green"}
+    assert gateway_input.name == "Renamed Result"
+    assert gateway_input.required is False
+    assert gateway_input.does_trigger is False
+    assert gateway_input.hidden is True
+    assert gateway_input.serialize(drop=False)["type"] == "float"
+    assert gateway_input.serialize(drop=False)["description"] == (
+        "A renamed output boundary"
+    )
+    assert group.output_bindings["result"]["name"] == "Renamed Result"
+    assert group.output_bindings["result"]["type"] == "float"
+    assert group.output_bindings["result"]["required"] is False
+    assert group.output_bindings["result"]["does_trigger"] is False
+
+
+def test_group_node_update_rejects_boundary_id_changes_without_mutation():
+    group = GroupNode()
+    group.add_group_input(id="value", name="Value", type=int)
+    group.add_group_output(id="result", name="Result", type=int)
+
+    with pytest.raises(ValueError, match="Boundary id cannot be changed"):
+        group.update_group_input("value", id="other")
+    with pytest.raises(ValueError, match="Boundary id cannot be changed"):
+        group.update_group_output("result", uuid="other")
+
+    assert set(group.input_bindings) == {"value"}
+    assert set(group.output_bindings) == {"result"}
+    assert group.inputs["value"].name == "Value"
+    assert group.outputs["result"].name == "Result"
+
+
 async def test_group_node_trigger_copies_public_inputs_to_gateway_outputs():
     group = GroupNode()
     group.add_group_input(id="value", type=int, does_trigger=False)
@@ -492,6 +602,114 @@ async def test_group_node_trigger_rejects_when_inner_node_is_active():
         group.trigger()
 
     await slow.wait_for_trigger_finish()
+
+
+async def test_group_node_ready_to_trigger_includes_inner_idle_state():
+    group = GroupNode()
+    slow = SlowDoubleNode()
+    group.inner_nodespace.add_node_instance(slow)
+
+    assert group.ready_to_trigger() is True
+
+    slow.inputs["value"].set_value(4)
+    await asyncio.sleep(0.01)
+
+    assert slow.in_trigger is True
+    assert group.ready_to_trigger() is False
+
+    await slow.wait_for_trigger_finish()
+
+    assert group.ready_to_trigger() is True
+
+
+async def test_group_node_request_trigger_waits_for_inner_idle_before_running():
+    group = GroupNode()
+    group.add_group_output(
+        id="result",
+        type=int,
+        required=False,
+        does_trigger=False,
+    )
+    slow = SlowDoubleNode()
+    group.inner_nodespace.add_node_instance(slow)
+    slow.outputs["result"].connect(group.group_output_node.inputs["result"])
+
+    slow.inputs["value"].set_value(4)
+    await asyncio.sleep(0.01)
+    group.request_trigger()
+
+    assert group.in_trigger is False
+    assert group.status()["requests_trigger"] is True
+
+    await slow.wait_for_trigger_finish()
+    for _ in range(20):
+        if group.outputs["result"].value == 8:
+            break
+        await asyncio.sleep(0.01)
+
+    assert group.outputs["result"].value == 8
+    assert group.status()["requests_trigger"] is False
+
+
+async def test_group_node_trigger_waits_for_nested_group_completion():
+    inner = GroupNode()
+    inner.add_group_input(id="value", type=int, does_trigger=False)
+    inner.add_group_output(
+        id="result",
+        type=int,
+        required=False,
+        does_trigger=False,
+    )
+    slow = SlowDoubleNode()
+    inner.inner_nodespace.add_node_instance(slow)
+    inner.group_input_node.outputs["value"].connect(slow.inputs["value"])
+    slow.outputs["result"].connect(inner.group_output_node.inputs["result"])
+
+    outer = GroupNode()
+    outer.add_group_input(id="value", type=int, does_trigger=False)
+    public_output = outer.add_group_output(
+        id="result",
+        type=int,
+        required=False,
+        does_trigger=False,
+    )
+    outer.inner_nodespace.add_node_instance(inner)
+    outer.group_input_node.outputs["value"].connect(inner.inputs["value"])
+    inner.outputs["result"].connect(outer.group_output_node.inputs["result"])
+    outer.inputs["value"].set_value(11, does_trigger=False)
+
+    triggerstack = outer.trigger()
+    await asyncio.sleep(0.01)
+
+    assert public_output.value is NoValue
+
+    await triggerstack
+
+    assert public_output.value == 22
+
+
+async def test_group_node_internal_exception_surfaces_on_outer_group():
+    group = GroupNode()
+    group.add_group_input(id="value", type=int, does_trigger=False)
+    group.add_group_output(
+        id="result",
+        type=int,
+        required=False,
+        does_trigger=False,
+    )
+    failing = FailingNode()
+    errors = []
+    group.on_error(lambda src, error: errors.append(error))
+    group.inner_nodespace.add_node_instance(failing)
+    group.group_input_node.outputs["value"].connect(failing.inputs["value"])
+    failing.outputs["result"].connect(group.group_output_node.inputs["result"])
+    group.inputs["value"].set_value(3, does_trigger=False)
+
+    await group.trigger()
+
+    assert len(errors) == 1
+    assert isinstance(errors[0], NodeTriggerError)
+    assert "cannot process 3" in str(errors[0])
 
 
 async def test_group_node_status_reports_inner_busy_state():
