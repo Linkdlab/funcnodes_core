@@ -78,6 +78,7 @@ class NodeSpace(EventEmitterMixin):
             str, Any
         ] = {}
         self.groups = GroupingLogic()
+        self._allow_group_gateway_nodes = False
         self.lib = Library()
         if id is None:
             id = uuid4().hex
@@ -239,7 +240,10 @@ class NodeSpace(EventEmitterMixin):
             the deserialized nodes
         """
         for node in self.nodes:
-            self.remove_node_instance(node)
+            self.remove_node_instance(
+                node,
+                _allow_group_gateway=self._allow_group_gateway_nodes,
+            )
         for node in data:
             try:
                 node_cls = self.lib.get_node_by_id(node["node_id"])
@@ -247,7 +251,10 @@ class NodeSpace(EventEmitterMixin):
                 node_cls = PlaceHolderNode
             node_instance = node_cls()
             node_instance.deserialize(node)
-            self.add_node_instance(node_instance)
+            self.add_node_instance(
+                node_instance,
+                _allow_group_gateway=self._allow_group_gateway_nodes,
+            )
 
     def deserialize_edges(self, data: List[Tuple[str, str, str, str]]):
         """
@@ -337,7 +344,10 @@ class NodeSpace(EventEmitterMixin):
     def clear(self):
         """clear removes all nodes and edges from the nodespace"""
         for node in self.nodes:
-            self.remove_node_instance(node)
+            self.remove_node_instance(
+                node,
+                _allow_group_gateway=self._allow_group_gateway_nodes,
+            )
         self.groups = GroupingLogic()
         self._properties = {}
 
@@ -346,14 +356,33 @@ class NodeSpace(EventEmitterMixin):
     # region nodes
     # region add/remove nodes
 
-    def add_node_instance(self, node: Node):
+    @staticmethod
+    def _is_group_gateway_node(node: Node) -> bool:
+        """Return whether `node` is an internal executable-group gateway."""
+
+        from .group_nodes import GroupInputNode, GroupOutputNode
+
+        return isinstance(node, (GroupInputNode, GroupOutputNode))
+
+    @staticmethod
+    def _raise_manual_group_gateway_error() -> None:
+        """Raise the shared error for manual group gateway node mutations."""
+
+        raise ValueError("Group gateway nodes are managed by GroupNode")
+
+    def add_node_instance(self, node: Node, *, _allow_group_gateway: bool = False):
         """add_node_instance adds a node instance to the nodespace
 
         Parameters
         ----------
         node : Node
             the node to add
+        _allow_group_gateway : bool
+            Internal-only switch used by `GroupNode` to create or restore its
+            required gateway nodes. Public callers must not pass this flag.
         """
+        if self._is_group_gateway_node(node) and not _allow_group_gateway:
+            self._raise_manual_group_gateway_error()
         if node.uuid in self._nodes:
             raise ValueError(f"node with uuid '{node.uuid}' already exists")
         self._nodes[node.uuid] = node
@@ -376,7 +405,16 @@ class NodeSpace(EventEmitterMixin):
           **data: Additional data passed with the event.
         """
         if event == "cleanup":
-            self.remove_node_instance(src)
+            # Gateway cleanup can be emitted during owning GroupNode teardown or
+            # garbage collection. Public remove_node_instance still rejects
+            # gateway removals; this path only prevents destructor warnings.
+            self.remove_node_instance(
+                src,
+                _allow_group_gateway=(
+                    self._allow_group_gateway_nodes
+                    or self._is_group_gateway_node(src)
+                ),
+            )
             return
         msg = MessageInArgs(node=src.uuid, **data)
         self.emit(event, msg)
@@ -399,16 +437,25 @@ class NodeSpace(EventEmitterMixin):
             ),
         )
 
-    def remove_node_instance(self, node: Node) -> str:
+    def remove_node_instance(
+        self,
+        node: Node,
+        *,
+        _allow_group_gateway: bool = False,
+    ) -> str:
         """
         Removes a node instance from the NodeSpace.
 
         Args:
           node (Node): The node instance to remove.
+          _allow_group_gateway: Internal-only switch used by `GroupNode` when
+            ungrouping or replacing its private gateway nodes.
 
         Returns:
           str: The UUID of the removed node.
         """
+        if self._is_group_gateway_node(node) and not _allow_group_gateway:
+            self._raise_manual_group_gateway_error()
         if node.uuid not in self._nodes:
             raise ValueError(f"node with uuid '{node.uuid}' not found in nodespace")
         self.groups.ungroup_nodes([node.uuid])
@@ -1014,8 +1061,14 @@ class NodeSpace(EventEmitterMixin):
             detached = group.inner_nodespace._detach_node_instance_for_grouping(node)
             self.add_node_instance(detached)
 
-        group.inner_nodespace.remove_node_instance(group.group_input_node)
-        group.inner_nodespace.remove_node_instance(group.group_output_node)
+        group.inner_nodespace.remove_node_instance(
+            group.group_input_node,
+            _allow_group_gateway=True,
+        )
+        group.inner_nodespace.remove_node_instance(
+            group.group_output_node,
+            _allow_group_gateway=True,
+        )
         self.remove_node_instance(group)
 
         for internal_output, external_input in outgoing_edges:
