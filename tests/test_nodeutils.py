@@ -58,6 +58,15 @@ class SlowEventTKNode(TKNode):
         self.asynceventmanager = SlowClearEventManager(self)
 
 
+class SourceNode(fn.Node):
+    node_id = "source_node_for_pretrigger_delay_tests"
+    default_trigger_on_create = False
+    op1 = fn.NodeOutput(uuid="op1", type=int)
+
+    async def func(self):
+        self.outputs["op1"].value = 1
+
+
 @dataclass
 class NodeChain:
     node1: fn.Node
@@ -131,6 +140,67 @@ async def test_node_progress(node_chain: NodeChain):
     assert collected[1]["prefix"] == "idle"
 
 
+def test_should_apply_pretrigger_delay_requires_multiple_data_connections():
+    node = TKNode(pretrigger_delay=0.1)
+    source1 = SourceNode()
+    source2 = SourceNode()
+
+    assert node.should_apply_pretrigger_delay() is False
+
+    source1.outputs["op1"].connect(node.inputs["ip1"])
+    assert node.should_apply_pretrigger_delay() is False
+
+    source2.outputs["op1"].connect(node.inputs["ip2"])
+    assert node.should_apply_pretrigger_delay() is True
+
+    node.inputs["ip2"].does_trigger = False
+    assert node.should_apply_pretrigger_delay() is True
+
+
+def test_should_apply_pretrigger_delay_ignores_internal_trigger_input():
+    node = TKNode(pretrigger_delay=0.1)
+    source1 = SourceNode()
+    source2 = SourceNode()
+
+    source1.outputs["op1"].connect(node.inputs["ip1"])
+    source2.outputs["_triggeroutput"].connect(node.inputs["_triggerinput"])
+
+    assert node.should_apply_pretrigger_delay() is False
+
+
+@funcnodes_test
+async def test_single_connected_input_skips_pretrigger_delay():
+    node = TKNode(pretrigger_delay=0.1)
+    source = SourceNode(pretrigger_delay=0.0)
+    node.inputs["ip2"].set_value(2, does_trigger=False)
+    source.outputs["op1"].connect(node.inputs["ip1"])
+
+    start = time.perf_counter()
+    source.outputs["op1"].value = 1
+    await node.wait_for_trigger_finish()
+    elapsed = time.perf_counter() - start
+
+    assert elapsed < 0.05
+    assert node.outputs["op1"].value == 1
+
+
+@funcnodes_test
+async def test_multiple_connected_inputs_apply_pretrigger_delay():
+    node = TKNode(pretrigger_delay=0.1)
+    source1 = SourceNode(pretrigger_delay=0.0)
+    source2 = SourceNode(pretrigger_delay=0.0)
+    source1.outputs["op1"].connect(node.inputs["ip1"])
+    source2.outputs["op1"].connect(node.inputs["ip2"])
+    node.inputs["ip2"].set_value(0, does_trigger=False)
+
+    source1.outputs["op1"].value = 10
+    await asyncio.sleep(0.05)
+    source2.outputs["op1"].value = 20
+    await node.wait_for_trigger_finish()
+
+    assert node.outputs["op1"].value == 1
+
+
 @funcnodes_test
 async def test_trigger_conut():
     node = TKNode(pretrigger_delay=0.1)
@@ -180,7 +250,7 @@ async def test_trigger_conut():
     assert node.outputs["op1"].value == 24
 
     node.inputs["ip1"].value = 11
-    await asyncio.sleep(0.05)  # the delay is small, trigger once
+    # no delay, trigger once
     node.inputs["ip2"].value = 21
     await node
     assert node.outputs["op1"].value == 25

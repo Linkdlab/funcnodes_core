@@ -457,6 +457,21 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
             raise ValueError("Pretrigger delay cannot be negative")
         self._pretrigger_delay = value
 
+    def should_apply_pretrigger_delay(self) -> bool:
+        """Return whether this trigger should wait for nearby input updates.
+
+        The pre-trigger delay exists to coalesce independent input updates that
+        arrive close together. Single-input paths do not benefit from that wait,
+        so only connected public data inputs are counted.
+        """
+
+        connected_data_inputs = [
+            ip
+            for ip in self._inputs
+            if ip.uuid != "_triggerinput" and ip.is_connected()
+        ]
+        return len(connected_data_inputs) > 1
+
     @saveproperty
     def progress(self) -> Type[tqdm]:
         return lambda *args, **kwargs: NodeTqdm(
@@ -995,7 +1010,7 @@ class Node(NoOverrideMixin, EventEmitterMixin, ABC, metaclass=NodeMeta):
                 pbar = self.progress(total=None, desc="triggering")
                 self.emit("triggerstart")
 
-            if self._pretrigger_delay > 0:
+            if self._pretrigger_delay > 0 and self.should_apply_pretrigger_delay():
                 await asyncio.sleep(self._pretrigger_delay)
             # no more changes please
             self._trigger_open = False
